@@ -341,6 +341,14 @@ export class NostrRuntime {
   };
 
   /**
+   * Get all relay URLs that currently have at least one active subscription.
+   * Any relay appearing here is treated as "connected" in the health indicator.
+   */
+  getActiveRelays(): Set<string> {
+    return this.subscriptionManager.getActiveRelays();
+  }
+
+  /**
    * Reconnect all active subscriptions.
    * Call after the app returns from background/idle to refresh stale connections.
    */

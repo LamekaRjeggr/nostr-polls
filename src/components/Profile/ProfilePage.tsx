@@ -83,6 +83,8 @@ const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
 
   const followersHandleRef = useRef<{ unsubscribe: () => void } | null>(null);
+  const relaysRef = useRef(relays);
+  useEffect(() => { relaysRef.current = relays; }, [relays]);
 
   // Auto-subscribe to following count + follows-you check (lightweight: single contact list).
   useEffect(() => {
@@ -191,11 +193,20 @@ const ProfilePage: React.FC = () => {
 
         setPubkey(extractedPubkey);
 
-        // Fetch profile metadata
-        const profileEvent = await fetchUserProfile(extractedPubkey, relays);
+        // Check cache first to avoid a network round-trip when we already
+        // have the profile stored (e.g. navigating back to a previously
+        // visited profile).
+        const cached = nostrRuntime.query({ kinds: [0], authors: [extractedPubkey] })[0];
+        if (cached) {
+          setProfile(JSON.parse(cached.content || "{}"));
+          setLoading(false);
+          return;
+        }
+
+        // Not in cache — fetch from relays using the current relay list.
+        const profileEvent = await fetchUserProfile(extractedPubkey, relaysRef.current);
         if (profileEvent) {
-          const profileData = JSON.parse(profileEvent.content || "{}");
-          setProfile(profileData);
+          setProfile(JSON.parse(profileEvent.content || "{}"));
         }
 
         setLoading(false);
@@ -207,7 +218,10 @@ const ProfilePage: React.FC = () => {
     };
 
     loadProfile();
-  }, [npubOrNprofile, relays]);
+    // Only re-run when the profile identifier changes, not when relays change.
+    // relays are read via relaysRef to avoid double-fetching on relay updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [npubOrNprofile]);
 
   const addToContacts = async () => {
     if (!user) {

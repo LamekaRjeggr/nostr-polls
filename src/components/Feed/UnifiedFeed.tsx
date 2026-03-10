@@ -1,9 +1,10 @@
 import React, { useRef } from "react";
 import { Box, CircularProgress, Fab } from "@mui/material";
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
-import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import { useNotification } from "../../contexts/notification-context";
 import useTopicExplorerScroll from "../../hooks/useTopicExplorerScroll";
 import { useFeedScroll } from "../../contexts/FeedScrollContext";
+import PullToRefresh from "../Common/PullToRefresh";
 
 interface UnifiedFeedProps<T> {
   // Data
@@ -32,6 +33,9 @@ interface UnifiedFeedProps<T> {
   onShowNewItems?: () => void;
   newItemLabel?: string;
 
+  // Pull-to-refresh (immersive mode only)
+  onRefresh?: () => Promise<void> | void;
+
   // Content above Virtuoso inside the scroll container
   headerContent?: React.ReactNode;
 
@@ -54,12 +58,16 @@ function UnifiedFeed<T>({
   newItemCount,
   onShowNewItems,
   newItemLabel = "posts",
+  onRefresh,
   headerContent,
   followOutput,
   virtuosoRef: externalVirtuosoRef,
 }: UnifiedFeedProps<T>) {
   const internalVirtuosoRef = useRef<VirtuosoHandle | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const { showNotification } = useNotification();
+  // Ref to the Virtuoso scroller element — used by PullToRefresh to check scrollTop
+  const virtuosoScrollerRef = useRef<HTMLElement | null>(null);
 
   const virtuosoRef = (externalVirtuosoRef ?? internalVirtuosoRef) as React.RefObject<VirtuosoHandle>;
 
@@ -67,7 +75,7 @@ function UnifiedFeed<T>({
   const isNested = !!scrollContainerRef;
   const isImmersive = !isEmbedded && !isNested;
 
-  const { reportScroll, resetScroll } = useFeedScroll();
+  const { reportScroll } = useFeedScroll();
 
   // Only active in nested (topic explorer) mode
   useTopicExplorerScroll(
@@ -124,9 +132,7 @@ function UnifiedFeed<T>({
     );
   }
 
-  // Immersive or nested mode: the container div must ALWAYS mount so that
-  // scroll hooks can attach their listeners to it.
-  return (
+  const feedContent = (
     <>
       <div ref={containerRef} style={{ height: "100%" }}>
         {headerContent}
@@ -153,8 +159,9 @@ function UnifiedFeed<T>({
             endReached={onEndReached}
             startReached={onStartReached}
             followOutput={followOutput}
-            increaseViewportBy={{ top: 3000, bottom: 400 }}
+            increaseViewportBy={{ top: 600, bottom: 600 }}
             defaultItemHeight={350}
+            scrollerRef={(el) => { virtuosoScrollerRef.current = el as HTMLElement | null; }}
             onScroll={
               isImmersive
                 ? (e) => reportScroll(e.currentTarget.scrollTop)
@@ -177,31 +184,41 @@ function UnifiedFeed<T>({
       {newItemCount != null && newItemCount > 0 && onShowNewItems && (
         <Fab
           variant="extended"
+          size="small"
           color="primary"
-          aria-label={`new ${newItemLabel}`}
+          aria-label={`${newItemCount} new ${newItemLabel}`}
           onClick={() => {
             onShowNewItems();
-            // Wait for React to commit the new items into the list, then jump to top.
-            // setTimeout(0) yields after the current synchronous work and scheduled
-            // microtasks so the state update is committed before we scroll.
-            setTimeout(() => {
-              virtuosoRef.current?.scrollToIndex({ index: 0, behavior: "smooth" });
-              resetScroll(); // re-show the header
-            }, 0);
+            showNotification(`Added ${newItemCount} new ${newItemLabel} to the feed`, "success", 2500);
           }}
           sx={{
             position: "fixed",
-            bottom: 24,
-            left: "50%",
-            transform: "translateX(-50%)",
+            right: 16,
+            top: "50%",
+            transform: "translateY(-50%)",
+            borderRadius: 2,
+            px: 1.5,
+            fontSize: "0.75rem",
+            fontWeight: 700,
+            whiteSpace: "nowrap",
           }}
         >
-          <KeyboardArrowUpIcon sx={{ mr: 0.5 }} />
-          {newItemCount} new {newItemLabel}
+          +{newItemCount} {newItemLabel}
         </Fab>
       )}
     </>
   );
+
+  // Wrap immersive feeds with pull-to-refresh when a handler is provided
+  if (isImmersive && onRefresh) {
+    return (
+      <PullToRefresh onRefresh={onRefresh} scrollRef={virtuosoScrollerRef}>
+        {feedContent}
+      </PullToRefresh>
+    );
+  }
+
+  return feedContent;
 }
 
 export default UnifiedFeed;

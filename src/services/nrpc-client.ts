@@ -243,18 +243,20 @@ export class NRPCClient {
     }
 
     // Subscribe for response before publishing request
-    const responsePromise = this.waitForResponse(requestId, encrypted);
+    const { promise: responsePromise, cancel } = this.waitForResponse(requestId, encrypted);
 
     // Publish request to relays
     try {
       await Promise.allSettled(pool.publish(this.config.relays, signedRequest));
     } catch (error) {
+      cancel();
       throw new Error(`Failed to publish request: ${error}`);
     }
 
     // Wait for response (with timeout)
     const response = await this.withTimeout(
       responsePromise,
+      cancel,
       this.config.timeout!,
       `nRPC call to ${method} timed out after ${this.config.timeout}ms`,
     );
@@ -263,58 +265,64 @@ export class NRPCClient {
   }
 
   /**
-   * Wait for nRPC response event
+   * Wait for nRPC response event.
+   * Returns { promise, cancel } so the caller can clean up the subscription
+   * on timeout without relying on a shared mutable slot.
    */
-  private waitForResponse(requestId: string, encrypted: boolean): Promise<any> {
-    return new Promise(async (resolve, reject) => {
+  private waitForResponse(
+    requestId: string,
+    encrypted: boolean,
+  ): { promise: Promise<any>; cancel: () => void } {
+    let cancel: () => void = () => {};
+
+    const promise = new Promise<any>(async (resolve, reject) => {
       const filter: Filter = encrypted
         ? {
-            // For encrypted responses, wait for kind 21169 gift wrap with #e = rumor ID
             kinds: [KIND_NRPC_GIFTWRAP],
-            "#e": [requestId], // Server puts ["e", rumorId] on the response wrap
+            "#e": [requestId],
           }
         : {
-            // For plain responses, wait for kind 22069 with #e = request ID
             kinds: [KIND_NRPC_RESPONSE],
             "#e": [requestId],
             authors: [this.serverPubkeyHex],
           };
 
-      let resolved = false;
+      let settled = false;
 
       const sub = pool.subscribeMany(this.config.relays, [filter], {
         onevent: async (event: Event) => {
-          if (resolved) return;
-
+          if (settled) return;
           try {
             let responseEvent = event;
-
-            // Decrypt if encrypted
             if (encrypted && event.kind === KIND_NRPC_GIFTWRAP) {
               responseEvent = await decryptResponse(event, this.serverPubkeyHex);
-              // No need to verify #e tag - already filtered by it
             }
-
-            resolved = true;
-
-            // Parse response
-            const result = this.parseResponse(responseEvent);
+            settled = true;
             sub.close();
-            resolve(result);
+            resolve(this.parseResponse(responseEvent));
           } catch (error) {
-            sub.close();
-            reject(error);
+            if (!settled) {
+              settled = true;
+              sub.close();
+              reject(error);
+            }
           }
         },
         oneose: () => {
-          // EOSE received but no response yet - keep waiting
-          // The timeout will handle this if the response never arrives
+          // EOSE received but no response yet — keep waiting for the timeout
         },
       });
 
-      // Store sub for cleanup on timeout
-      (this.waitForResponse as any)._activeSub = sub;
+      cancel = () => {
+        if (!settled) {
+          settled = true;
+          sub.close();
+          reject(new Error("nRPC request cancelled"));
+        }
+      };
     });
+
+    return { promise, cancel };
   }
 
   /**
@@ -382,6 +390,7 @@ export class NRPCClient {
    */
   private withTimeout<T>(
     promise: Promise<T>,
+    cancel: () => void,
     timeoutMs: number,
     errorMessage: string,
   ): Promise<T> {
@@ -389,11 +398,7 @@ export class NRPCClient {
       promise,
       new Promise<T>((_, reject) => {
         setTimeout(() => {
-          // Clean up active subscription if exists
-          const sub = (this.waitForResponse as any)._activeSub;
-          if (sub) {
-            sub.close();
-          }
+          cancel();
           reject(new Error(errorMessage));
         }, timeoutMs);
       }),

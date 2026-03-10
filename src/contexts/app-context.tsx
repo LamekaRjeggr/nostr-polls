@@ -1,8 +1,9 @@
-import { ReactNode, createContext, useRef, useState, useMemo, useCallback } from "react";
+import { ReactNode, createContext, useRef, useState, useMemo, useCallback, useEffect } from "react";
 import { Event } from "nostr-tools/lib/types/core";
 import { Profile } from "../nostr/types";
 import { Throttler } from "../nostr/requestThrottler";
 import { pool, nostrRuntime } from "../singletons";
+import { getCachedProfiles, setCachedProfile } from "../utils/localStorage";
 
 type AppContextInterface = {
   profiles: Map<string, Profile>;
@@ -53,15 +54,29 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
     dataTimerRef.current = setTimeout(() => setDataVersion((v) => v + 1), 50);
   }, []);
 
+  // Seed nostrRuntime from localStorage profile cache on first mount so
+  // avatars/names are available before any network responses arrive.
+  useEffect(() => {
+    const cached = getCachedProfiles();
+    if (cached.length > 0) {
+      nostrRuntime.addEvents(cached as Event[]);
+      bumpProfilesVersion();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Add event to runtime store (for profiles)
   const addEventToProfiles = useCallback((event: Event) => {
     nostrRuntime.addEvent(event);
+    if (event.kind === 0) setCachedProfile(event as any);
     bumpProfilesVersion();
   }, [bumpProfilesVersion]);
 
   // Batch add events to runtime
   const addEventsToProfiles = useCallback((events: Event[]) => {
     nostrRuntime.addEvents(events);
+    for (const event of events) {
+      if (event.kind === 0) setCachedProfile(event as any);
+    }
     bumpProfilesVersion();
   }, [bumpProfilesVersion]);
 

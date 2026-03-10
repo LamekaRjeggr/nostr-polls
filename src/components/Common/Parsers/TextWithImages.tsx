@@ -343,29 +343,18 @@ export const TextWithImages: React.FC<TextWithImagesProps> = ({
   const { detectLanguage } = useTranslationBatch();
   const browserLang = navigator.language.slice(0, 2).toLowerCase();
 
-  const hasAI = true; // AI service available via nRPC
-
+  // Language detection is synchronous (Unicode heuristic, no nRPC).
+  // Only show translate button when AI is configured AND the post is
+  // clearly written in a non-browser-language script.
   useEffect(() => {
     setDisplayedText(content ?? "");
-    if (!hasAI || !aiSettings.model) return;
-
-    const detectLang = async () => {
-      try {
-        // Use batched language detection
-        const lang = await detectLanguage(content, aiSettings.model || "llama3");
-
-        if (lang && /^[a-z]{2}$/.test(lang.toLowerCase())) {
-          setShouldShowTranslate(lang.toLowerCase() !== browserLang);
-        } else {
-          setShouldShowTranslate(false);
-        }
-      } catch (err) {
-        setShouldShowTranslate(false);
-      }
-    };
-
-    detectLang();
-  }, [content, aiSettings.model, browserLang, hasAI, detectLanguage]);
+    if (!aiSettings.model) {
+      setShouldShowTranslate(false);
+      return;
+    }
+    const lang = detectLanguage(content);
+    setShouldShowTranslate(lang !== null && lang !== browserLang);
+  }, [content, aiSettings.model, browserLang, detectLanguage]);
 
   const handleTranslate = async () => {
     setIsTranslating(true);
@@ -474,7 +463,7 @@ export const TextWithImages: React.FC<TextWithImagesProps> = ({
       <div style={{ minWidth: 0, overflowWrap: "anywhere" }}>
         {renderContent(displayedText)}
       </div>
-      {hasAI && shouldShowTranslate && (
+      {shouldShowTranslate && (
         <div>
           <Tooltip title="Translate">
             <span>

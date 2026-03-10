@@ -2,7 +2,6 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { nostrRuntime } from "../../../../singletons";
 import { useRelays } from "../../../../hooks/useRelays";
 import { Filter } from "nostr-tools/lib/types";
-import { useFeedScroll } from "../../../../contexts/FeedScrollContext";
 
 const LOAD_TIMEOUT_MS = 5000;
 
@@ -15,7 +14,6 @@ export const useDiscoverNotes = () => {
     const subscriptionHandleRef = useRef<any>(null);
     const fetchedRef = useRef(false);
     const webOfTrustRef = useRef<Set<string>>(new Set());
-    const { getScrollTop } = useFeedScroll();
 
     // Query runtime for notes (only re-queries when version bumps, i.e. when user merges)
     const notes = useCallback(() => {
@@ -75,15 +73,15 @@ export const useDiscoverNotes = () => {
             limit: 20,
         };
 
+        let hasNewEvents = false;
         const handle = nostrRuntime.subscribe(relays, [filter], {
             onEvent: () => {
-                if (getScrollTop() > 0) {
-                    setPendingCount((c) => c + 1);
-                } else {
-                    setVersion((v) => v + 1);
-                }
+                // Collect events without triggering per-event re-renders.
+                hasNewEvents = true;
             },
             onEose: () => {
+                // Single version bump once all events have landed in the store.
+                if (hasNewEvents) setVersion((v) => v + 1);
                 setLoadingMore(false);
                 setInitialLoadComplete(true);
                 handle.unsubscribe();
@@ -106,11 +104,20 @@ export const useDiscoverNotes = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [relays]);
 
+    const refreshNotes = useCallback((webOfTrust: Set<string>) => {
+        fetchedRef.current = false; // allow re-fetch
+        setVersion(0);
+        setPendingCount(0);
+        setInitialLoadComplete(false);
+        fetchNotes(webOfTrust);
+    }, [fetchNotes]);
+
     return {
         notes: notes(),
         pendingCount,
         loadingMore,
         fetchNotes,
+        refreshNotes,
         mergeNewNotes,
     };
 };

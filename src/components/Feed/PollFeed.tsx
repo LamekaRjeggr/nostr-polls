@@ -190,6 +190,17 @@ export const PollFeed = () => {
     setFeedSubscription(closer);
   };
 
+  const refreshFeed = useCallback(() => {
+    if (feedSubscription) feedSubscription.unsubscribe();
+    setPollEvents([]);
+    setRepostEvents([]);
+    setPendingPollEvents([]);
+    setLoadingInitial(true);
+    loadingInitialRef.current = true;
+    const closer = fetchInitialPolls();
+    setFeedSubscription(closer);
+  }, [eventSource]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const fetchInitialPolls = () => {
     const filterPolls: Filter = {
       kinds: [KIND_POLL],
@@ -335,10 +346,16 @@ export const PollFeed = () => {
   }, [user]);
 
   useEffect(() => {
+    const pollHandle = { current: null as ReturnType<typeof subscribeWithAuthors> | null };
     const interval = setInterval(() => {
-      pollForNewPolls();
-    }, 15000);
-    return () => clearInterval(interval);
+      // Close the previous polling subscription before opening a new one
+      pollHandle.current?.unsubscribe();
+      pollHandle.current = pollForNewPolls();
+    }, 60_000);
+    return () => {
+      clearInterval(interval);
+      pollHandle.current?.unsubscribe();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pollEvents, repostEvents, relays, eventSource]);
 
@@ -376,6 +393,7 @@ export const PollFeed = () => {
           loading={loadingInitial}
           loadingMore={loadingMore}
           onEndReached={loadMore}
+          onRefresh={refreshFeed}
           computeItemKey={(_, event) => event.id}
           newItemCount={pendingPollEvents.length}
           onShowNewItems={showNewPolls}

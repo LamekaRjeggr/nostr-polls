@@ -13,7 +13,7 @@ const isRootNote = (event: { tags: string[][] }) =>
 
 const DiscoverFeed = ({ noteMode }: { noteMode: NoteMode }) => {
   const { user, requestLogin } = useUserContext();
-  const { notes, pendingCount, fetchNotes, loadingMore, mergeNewNotes } =
+  const { notes, pendingCount, fetchNotes, refreshNotes, loadingMore, mergeNewNotes } =
     useDiscoverNotes();
 
   useEffect(() => {
@@ -84,6 +84,7 @@ const DiscoverFeed = ({ noteMode }: { noteMode: NoteMode }) => {
       data={mergedNotes}
       loading={loadingMore && mergedNotes.length === 0}
       followOutput={false}
+      onRefresh={() => user?.webOfTrust && refreshNotes(user.webOfTrust)}
       newItemCount={pendingCount}
       newItemLabel="notes"
       onShowNewItems={mergeNewNotes}

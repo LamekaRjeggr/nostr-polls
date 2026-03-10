@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { Button, CircularProgress } from "@mui/material";
+import { Button } from "@mui/material";
 import { useUserContext } from "../../../../hooks/useUserContext";
 import RepostsCard from "./RepostedNoteCard";
 import { useFollowingNotes } from "../hooks/useFollowingNotes";
@@ -11,7 +11,7 @@ const isRootNote = (event: { tags: string[][] }) =>
 
 const FollowingFeed = ({ noteMode }: { noteMode: NoteMode }) => {
   const { user, requestLogin } = useUserContext();
-  const { notes, reposts, fetchNotes, loadingMore, pendingCount, mergeNewNotes } =
+  const { notes, reposts, fetchNotes, refreshNotes, loadingMore, pendingCount, mergeNewNotes } =
     useFollowingNotes();
 
   // Merge notes and reposts for sorting by created_at
@@ -45,27 +45,31 @@ const FollowingFeed = ({ noteMode }: { noteMode: NoteMode }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
+  if (!user) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          margin: 10,
+        }}
+      >
+        <Button variant="contained" onClick={requestLogin}>
+          login to view feed
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div style={{ height: "100%", overflow: "hidden" }}>
-      {!user ? (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            margin: 10,
-          }}
-        >
-          <Button variant="contained" onClick={requestLogin}>
-            login to view feed
-          </Button>
-        </div>
-      ) : null}
-      {loadingMore ? <CircularProgress /> : null}
       <UnifiedFeed
         data={mergedNotes}
+        loading={loadingMore && mergedNotes.length === 0}
         followOutput={false}
         onEndReached={fetchNotes}
+        onRefresh={refreshNotes}
         computeItemKey={(_, item) => item.note.id}
         newItemCount={pendingCount}
         onShowNewItems={mergeNewNotes}

@@ -223,6 +223,19 @@ export class SubscriptionManager {
   }
 
   /**
+   * Get all relay URLs that have at least one active subscription.
+   * Used as a proxy for "connected" status — if we're subscribed, the relay
+   * is (or was recently) reachable.
+   */
+  getActiveRelays(): Set<string> {
+    const relaySet = new Set<string>();
+    for (const sub of Array.from(this.subscriptions.values())) {
+      for (const relay of sub.relays) relaySet.add(relay);
+    }
+    return relaySet;
+  }
+
+  /**
    * Get debug information about all subscriptions
    */
   listSubscriptions(): SubscriptionDebugInfo[] {

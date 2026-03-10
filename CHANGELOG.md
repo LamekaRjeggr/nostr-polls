@@ -1,3 +1,10 @@
+# 1.4.3
+
+- Fix feed issues
+- Fix unncessary reloads
+- added relay indicator
+- Added pull to refresh on all feeds
+
 # 1.4.0
 
 - Add PIP video player for uninterrupted 24/7 video streaming.

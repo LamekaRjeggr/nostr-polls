@@ -174,6 +174,17 @@ export const Notes: React.FC<NotesProps> = ({
   };
 
   const handleContextMenu = (event: React.MouseEvent) => {
+    const target = event.target as HTMLElement;
+    // Don't intercept context menu inside inputs/textareas/links — user needs
+    // native browser menu for paste, spell-check, open-in-new-tab, etc.
+    if (
+      target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.isContentEditable ||
+      target.closest("a")
+    ) {
+      return;
+    }
     event.preventDefault();
     setMenuAnchor(event.currentTarget as HTMLElement);
   };

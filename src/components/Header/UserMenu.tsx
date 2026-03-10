@@ -1,5 +1,5 @@
 import React from "react";
-import { Avatar, Badge, Menu, MenuItem, Tooltip } from "@mui/material";
+import { Avatar, Badge, Box, Chip, Menu, MenuItem, Tooltip } from "@mui/material";
 import { useUserContext } from "../../hooks/useUserContext";
 import { ColorSchemeToggle } from "../ColorScheme";
 import { styled } from "@mui/system";
@@ -11,6 +11,8 @@ import { WarningAmber } from "@mui/icons-material";
 import { ViewKeysModal } from "../User/ViewKeysModal";
 import { useNavigate } from "react-router-dom";
 import { nip19 } from "nostr-tools";
+import { useRelayHealth } from "../../contexts/RelayHealthContext";
+import WifiIcon from "@mui/icons-material/Wifi";
 
 const ListItem = styled("li")(() => ({
   padding: "0 16px",
@@ -24,6 +26,7 @@ export const UserMenu: React.FC = () => {
   const [showContactsModal, setShowContactsModal] = React.useState(false);
   const { user } = useUserContext();
   const navigate = useNavigate();
+  const { connected, total } = useRelayHealth();
 
   const handleLogOut = () => {
     signerManager.logout();
@@ -70,6 +73,20 @@ export const UserMenu: React.FC = () => {
         open={Boolean(anchorEl)}
         onClose={() => setAnchorEl(null)}
       >
+        {/* Relay health — always visible at the top of the menu */}
+        <ListItem key="relay-health">
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.5 }}>
+            <WifiIcon fontSize="small" color={connected === total && total > 0 ? "success" : connected > 0 ? "warning" : "error"} />
+            <Tooltip title={`${connected} of ${total} relays connected`}>
+              <Chip
+                size="small"
+                label={total > 0 ? `${connected}/${total} relays` : "no relays"}
+                color={connected === total && total > 0 ? "success" : connected > 0 ? "warning" : "error"}
+                variant="outlined"
+              />
+            </Tooltip>
+          </Box>
+        </ListItem>
         {user
           ? [
               <MenuItem key="profile" onClick={handleProfileClick}>

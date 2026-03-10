@@ -1,4 +1,4 @@
-import React, { useState, lazy, Suspense } from "react";
+import React, { useState, lazy, Suspense, useRef, useLayoutEffect } from "react";
 import { Typography, CircularProgress, Chip, Box } from "@mui/material";
 import RateEventModal from "../../../Ratings/RateEventModal";
 import NotesFeedTabs from "./NotesFeedTabs";
@@ -29,6 +29,16 @@ const NotesFeed = () => {
   const [noteMode, setNoteMode] = useState<NoteMode>("notes");
   const { headerProgress } = useFeedScroll();
 
+  // Measure the actual rendered height of the sub-tabs section so the
+  // collapse animation has no dead zone (same pattern as App.tsx header).
+  const subTabsInnerRef = useRef<HTMLDivElement>(null);
+  const [subTabsH, setSubTabsH] = useState(126);
+  useLayoutEffect(() => {
+    if (subTabsInnerRef.current) {
+      setSubTabsH(subTabsInnerRef.current.offsetHeight);
+    }
+  }, [activeTab]); // re-measure if tab changes (filter chips appear/disappear)
+
   const showNoteFilter = activeTab === "following" || activeTab === "discover";
 
   return (
@@ -36,41 +46,43 @@ const NotesFeed = () => {
       <Box
         sx={{
           overflow: "hidden",
-          height: Math.max(0, 126 * (1 - headerProgress)),
+          height: Math.max(0, subTabsH * (1 - headerProgress)),
           opacity: 1 - headerProgress,
         }}
       >
-        <NotesFeedTabs activeTab={activeTab} setActiveTab={handleSetActiveTab} />
+        <div ref={subTabsInnerRef}>
+          <NotesFeedTabs activeTab={activeTab} setActiveTab={handleSetActiveTab} />
 
-        <Typography sx={{ mt: 2 }}>
-          {activeTab === "following"
-            ? "Notes from people you follow"
-            : activeTab === "reacted"
-            ? "Notes reacted to by contacts"
-            : "Discover new posts from friends of friends"}
-        </Typography>
+          <Typography sx={{ mt: 2 }}>
+            {activeTab === "following"
+              ? "Notes from people you follow"
+              : activeTab === "reacted"
+              ? "Notes reacted to by contacts"
+              : "Discover new posts from friends of friends"}
+          </Typography>
 
-        {showNoteFilter && (
-          <Box display="flex" gap={1} sx={{ mt: 1, mb: 1, ml: 1 }}>
-            <Chip
-              label="Notes"
-              size="small"
-              variant={noteMode === "notes" ? "filled" : "outlined"}
-              color={noteMode === "notes" ? "primary" : "default"}
-              onClick={() => setNoteMode("notes")}
-            />
-            <Chip
-              label="Conversations"
-              size="small"
-              variant={noteMode === "conversations" ? "filled" : "outlined"}
-              color={noteMode === "conversations" ? "primary" : "default"}
-              onClick={() => setNoteMode("conversations")}
-            />
-          </Box>
-        )}
+          {showNoteFilter && (
+            <Box display="flex" gap={1} sx={{ mt: 1, mb: 1, ml: 1 }}>
+              <Chip
+                label="Notes"
+                size="small"
+                variant={noteMode === "notes" ? "filled" : "outlined"}
+                color={noteMode === "notes" ? "primary" : "default"}
+                onClick={() => setNoteMode("notes")}
+              />
+              <Chip
+                label="Conversations"
+                size="small"
+                variant={noteMode === "conversations" ? "filled" : "outlined"}
+                color={noteMode === "conversations" ? "primary" : "default"}
+                onClick={() => setNoteMode("conversations")}
+              />
+            </Box>
+          )}
+        </div>
       </Box>
 
-      <Box sx={{ flex: 1, minHeight: 0 }}>
+      <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
         <Suspense fallback={<CircularProgress sx={{ m: 4 }} />}>
           {activeTab === "following" ? (
             <FollowingFeed noteMode={noteMode} />

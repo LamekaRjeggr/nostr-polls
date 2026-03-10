@@ -9,9 +9,9 @@ export const defaultRelays = [
   "wss://nos.lol",
   "wss://relay.nostr.wirednet.jp/",
   "wss://nostr-01.yakihonne.com",
-  "wss://relay.snort.social",
-  "wss://relay.nostr.band",
   "wss://nostr21.com",
+  // relay.snort.social removed — frequently drops connections causing console spam
+  // relay.nostr.band removed — confirmed dead
 ];
 
 // Relays that support NIP-50 free-text search (mirrors Snort's SearchRelays config)

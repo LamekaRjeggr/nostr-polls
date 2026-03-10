@@ -3,7 +3,6 @@ import { Event, Filter } from "nostr-tools";
 import { useRelays } from "../../../../hooks/useRelays";
 import { nostrRuntime } from "../../../../singletons";
 import { useUserContext } from "../../../../hooks/useUserContext";
-import { useFeedScroll } from "../../../../contexts/FeedScrollContext";
 
 export const useFollowingNotes = () => {
   const [loadingMore, setLoadingMore] = useState(false);
@@ -14,7 +13,6 @@ export const useFollowingNotes = () => {
 
   const { relays } = useRelays();
   const { user } = useUserContext();
-  const { getScrollTop } = useFeedScroll();
 
   const notes = useCallback(() => {
     if (!user?.follows?.length) return new Map<string, Event>();
@@ -114,20 +112,22 @@ export const useFollowingNotes = () => {
       repostFilter.until = oldestRepostTime;
     }
 
+    let hasNewEvents = false;
     const handle = nostrRuntime.subscribe(relays, [noteFilter, repostFilter], {
       onEvent: (event: Event) => {
         if (event.kind === 6) {
           const originalNoteId = event.tags.find((t) => t[0] === "e")?.[1];
           if (originalNoteId) missingNotesRef.current.add(originalNoteId);
         }
-        if (getScrollTop() > 0) {
-          setPendingCount((c) => c + 1);
-        } else {
-          setVersion((v) => v + 1);
-        }
+        // Mark that we received events; defer the version bump to EOSE so
+        // we don't re-render the list on every individual event (avoids jitter).
+        hasNewEvents = true;
       },
       onEose: () => {
         handle.unsubscribe();
+        // Single version bump after all events have been stored, regardless
+        // of scroll position — these are paginated posts, not live updates.
+        if (hasNewEvents) setVersion((v) => v + 1);
         startMissingNotesFetcher();
         setLoadingMore(false);
         initialLoadDoneRef.current = true;
@@ -135,10 +135,20 @@ export const useFollowingNotes = () => {
     });
   };
 
+  const refreshNotes = useCallback(() => {
+    initialLoadDoneRef.current = false;
+    missingNotesRef.current.clear();
+    setVersion(0);
+    setPendingCount(0);
+    // fetchNotes will re-run as a fresh initial load (no `until` filter)
+    fetchNotes();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   return {
     notes: notes(),
     reposts: reposts(),
     fetchNotes,
+    refreshNotes,
     loadingMore,
     pendingCount,
     mergeNewNotes,
