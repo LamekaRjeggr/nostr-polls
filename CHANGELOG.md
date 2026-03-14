@@ -1,3 +1,9 @@
+# 1.5.1
+
+- Complete UI Overhaul
+- Add NIP05 badges
+- Reconnect to relays on app suspends.
+
 # 1.4.5
 
 - Add Reporting
