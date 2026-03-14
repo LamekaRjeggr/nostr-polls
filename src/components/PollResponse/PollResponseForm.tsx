@@ -244,7 +244,13 @@ const PollResponseForm: React.FC<PollResponseFormProps> = ({
     setShowPoWModal(false);
     const signedResponse = await signEvent(useEvent, responseUser!.privateKey);
     const eventRelays = pollEvent.tags.filter((t) => t[0] === "relay").map((t) => t[1]);
-    pool.publish(eventRelays.length ? eventRelays : relays, signedResponse!);
+    const publishRelays = eventRelays.length ? eventRelays : relays;
+    const result = await waitForPublish(publishRelays, signedResponse!);
+    if (result.ok) {
+      showNotification(`Vote submitted to ${result.accepted}/${result.total} relays`, "success");
+    } else {
+      showNotification("No relays accepted your vote", "error");
+    }
     setHasSubmitted(true);
     setShowResults(true);
   };

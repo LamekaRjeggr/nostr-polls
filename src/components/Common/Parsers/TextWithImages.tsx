@@ -41,20 +41,39 @@ const ImageWithLightbox: React.FC<{ src: string; index: number }> = ({ src, inde
   const [open, setOpen] = React.useState(false);
   return (
     <>
-      <img
-        src={src}
-        alt={`img-${index}`}
+      <div
+        style={{ position: "relative", marginBottom: "0.5rem", borderRadius: "6px", overflow: "hidden", cursor: "pointer" }}
         onClick={() => setOpen(true)}
-        style={{
-          display: "block",
-          width: "100%",
-          height: "220px",
-          objectFit: "cover",
-          marginBottom: "0.5rem",
-          cursor: "pointer",
-          borderRadius: "6px",
-        }}
-      />
+      >
+        <img
+          src={src}
+          alt={`img-${index}`}
+          style={{
+            display: "block",
+            width: "100%",
+            height: "220px",
+            objectFit: "cover",
+          }}
+        />
+        {/* Expand icon — signals the image is clipped and tappable */}
+        <div style={{
+          position: "absolute",
+          bottom: 8,
+          right: 8,
+          background: "rgba(0,0,0,0.45)",
+          borderRadius: "4px",
+          width: 28,
+          height: 28,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          pointerEvents: "none",
+        }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="white">
+            <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+          </svg>
+        </div>
+      </div>
       {open && createPortal(
         <div
           onClick={() => setOpen(false)}

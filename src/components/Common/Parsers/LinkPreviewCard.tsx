@@ -150,15 +150,17 @@ export const LinkPreviewCard: React.FC<LinkPreviewCardProps> = ({ url }) => {
       }}
     >
       {preview.image && (
-        <Box
-          component="img"
-          src={preview.image}
-          alt=""
-          sx={{ width: "100%", maxHeight: 200, objectFit: "cover", display: "block" }}
-          onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
-            e.currentTarget.style.display = "none";
-          }}
-        />
+        <Box sx={{ position: "relative", overflow: "hidden" }}>
+          <Box
+            component="img"
+            src={preview.image}
+            alt=""
+            sx={{ width: "100%", maxHeight: 200, objectFit: "cover", display: "block" }}
+            onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
+              e.currentTarget.style.display = "none";
+            }}
+          />
+        </Box>
       )}
       <Box sx={{ p: 1.5 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>

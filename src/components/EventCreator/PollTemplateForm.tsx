@@ -35,6 +35,7 @@ import { useRelays } from "../../hooks/useRelays";
 import { PollPreview } from "./PollPreview";
 import { Event } from "nostr-tools";
 import { waitForPublish } from "../../utils/publish";
+import { extractHashtags } from "../../utils/common";
 
 const generateOptionId = (): string => {
   return Math.random().toString(36).substr(2, 9);
@@ -96,12 +97,6 @@ const PollTemplateForm: React.FC<{
     setOptions(updatedOptions);
   };
 
-  const extractHashtags = (text: string): string[] => {
-    const hashtagRegex = /#(\w+)/g;
-    const matches = text.matchAll(hashtagRegex);
-    return Array.from(new Set(matches.map((m) => m[1].toLowerCase())));
-  };
-
   useEffect(() => {
     setTopics(extractHashtags(eventContent));
   }, [eventContent]);
@@ -150,7 +145,7 @@ const PollTemplateForm: React.FC<{
       setIsSubmitting(false);
       if (result.ok) {
         showNotification(
-          NOTIFICATION_MESSAGES.POLL_PUBLISHED_SUCCESS,
+          `Poll published to ${result.accepted}/${result.total} relays`,
           "success"
         );
         navigate("/feeds/polls");

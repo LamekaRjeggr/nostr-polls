@@ -1,3 +1,8 @@
+export const extractHashtags = (text: string): string[] => {
+  const matches = text.matchAll(/#(\w+)/g);
+  return Array.from(new Set(Array.from(matches, (m) => m[1].toLowerCase())));
+};
+
 export const isImageUrl = (url: string): boolean => {
   return url.match(/\.(jpeg|jpg|gif|png|webp)(\?.*)?$/) != null;
 };

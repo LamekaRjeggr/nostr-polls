@@ -30,6 +30,7 @@ import { PostEnhancementDialog } from "./PostEnhancementDialog";
 import { aiService } from "../../services/ai-service";
 import { useAppContext } from "../../hooks/useAppContext";
 import { uploadToBlossom, getBlossomServer } from "../../services/blossomService";
+import { extractHashtags } from "../../utils/common";
 
 const UPLOAD_PLACEHOLDER = "[uploading…]";
 
@@ -54,13 +55,6 @@ const NoteTemplateForm: React.FC<{
   const { relays } = useRelays();
   const { aiSettings } = useAppContext();
   const navigate = useNavigate();
-
-  // Extract hashtags like #example from the text
-  const extractHashtags = (text: string): string[] => {
-    const hashtagRegex = /#(\w+)/g;
-    const matches = text.matchAll(hashtagRegex);
-    return Array.from(new Set(Array.from(matches, (m) => m[1].toLowerCase())));
-  };
 
   // Update topics whenever eventContent changes
   useEffect(() => {
@@ -157,7 +151,7 @@ const NoteTemplateForm: React.FC<{
       setIsSubmitting(false);
       if (result.ok) {
         showNotification(
-          NOTIFICATION_MESSAGES.NOTE_PUBLISHED_SUCCESS,
+          `Note published to ${result.accepted}/${result.total} relays`,
           "success"
         );
         navigate("/feeds/notes");

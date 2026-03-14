@@ -6,20 +6,25 @@ import {
   DialogActions,
   Button,
   Box,
-  Paper,
+  Collapse,
   Typography,
 } from "@mui/material";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import { Event, nip19 } from "nostr-tools";
 import { useUserContext } from "../../../hooks/useUserContext";
 import { useRelays } from "../../../hooks/useRelays";
 import { useNotification } from "../../../contexts/notification-context";
 import { signEvent } from "../../../nostr";
-import { pool } from "../../../singletons";
+import { waitForPublish } from "../../../utils/publish";
+import { extractHashtags } from "../../../utils/common";
 import { NOSTR_EVENT_KINDS } from "../../../constants/nostr";
 import MentionTextArea, {
   extractMentionTags,
 } from "../../EventCreator/MentionTextArea";
-import { PrepareNote } from "../../Notes/PrepareNote";
+import { NotePreview } from "../../EventCreator/NotePreview";
+import { Notes } from "../../Notes";
+import PollResponseForm from "../../PollResponse/PollResponseForm";
 
 interface QuotePostDialogProps {
   open: boolean;
@@ -34,12 +39,12 @@ const QuotePostDialog: React.FC<QuotePostDialogProps> = ({
 }) => {
   const [content, setContent] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const { user } = useUserContext();
   const { relays } = useRelays();
   const { showNotification } = useNotification();
 
   const neventId = useMemo(() => {
-    // Validate event.id is a valid 64-char hex string
     if (!event.id || event.id.length !== 64 || !/^[0-9a-f]+$/i.test(event.id)) {
       return null;
     }
@@ -53,12 +58,6 @@ const QuotePostDialog: React.FC<QuotePostDialogProps> = ({
       return null;
     }
   }, [event.id, event.kind, relays]);
-
-  const extractHashtags = (text: string): string[] => {
-    const hashtagRegex = /#(\w+)/g;
-    const matches = text.matchAll(hashtagRegex);
-    return Array.from(new Set(Array.from(matches, (m) => m[1].toLowerCase())));
-  };
 
   const handleSubmit = async () => {
     if (!user || !neventId) return;
@@ -89,10 +88,14 @@ const QuotePostDialog: React.FC<QuotePostDialogProps> = ({
         showNotification("Failed to sign quote post", "error");
         return;
       }
-      pool.publish(relays, signedEvent);
-      showNotification("Quote post published!", "success");
-      setContent("");
-      onClose();
+      const result = await waitForPublish(relays, signedEvent);
+      if (result.ok) {
+        showNotification(`Quote post published to ${result.accepted}/${result.total} relays`, "success");
+        setContent("");
+        onClose();
+      } else {
+        showNotification("No relays accepted your quote post", "error");
+      }
     } catch (error) {
       console.error("Error publishing quote post:", error);
       showNotification("Failed to publish quote post", "error");
@@ -104,9 +107,15 @@ const QuotePostDialog: React.FC<QuotePostDialogProps> = ({
   const handleClose = () => {
     if (!isSubmitting) {
       setContent("");
+      setShowPreview(false);
       onClose();
     }
   };
+
+  const previewEvent = useMemo(() => ({
+    content: content.trim() ? `${content}\n\nnostr:${neventId}` : "",
+    tags: [],
+  }), [content, neventId]);
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
@@ -122,23 +131,42 @@ const QuotePostDialog: React.FC<QuotePostDialogProps> = ({
             maxRows={6}
           />
         </Box>
+
+        <Button
+          size="small"
+          variant="text"
+          startIcon={showPreview ? <VisibilityOffIcon /> : <VisibilityIcon />}
+          onClick={() => setShowPreview((v) => !v)}
+          sx={{ mt: 1 }}
+        >
+          {showPreview ? "Hide Preview" : "Preview"}
+        </Button>
+
+        <Collapse in={showPreview}>
+          <NotePreview noteEvent={previewEvent} />
+        </Collapse>
+
         {neventId ? (
-          <Paper
-            variant="outlined"
+          <Box
             sx={{
               mt: 2,
-              p: 1,
-              maxHeight: 300,
-              overflow: "auto",
+              border: "1px solid",
+              borderColor: "divider",
+              borderRadius: 1,
+              overflow: "hidden",
               opacity: 0.85,
               pointerEvents: "none",
             }}
           >
-            <Typography variant="caption" color="text.secondary" sx={{ mb: 1 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ px: 1.5, pt: 1, display: "block" }}>
               Quoting:
             </Typography>
-            <PrepareNote neventId={neventId} />
-          </Paper>
+            {event.kind === NOSTR_EVENT_KINDS.POLL ? (
+              <PollResponseForm pollEvent={event} />
+            ) : (
+              <Notes event={event} />
+            )}
+          </Box>
         ) : (
           <Typography color="error" sx={{ mt: 2 }}>
             Unable to load post preview
