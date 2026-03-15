@@ -1,3 +1,10 @@
+# 1.5.2
+
+- Make pollerama gossip compliant
+- Accessibility for copy-paste is increased
+- Performance Issues fixed
+- Image accessibility increased
+
 # 1.5.1
 
 - Complete UI Overhaul
