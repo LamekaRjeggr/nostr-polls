@@ -1,3 +1,17 @@
+# 1.6.1
+
+- Websocket cleanup for mobile devices
+- Better performance on lower powered device.
+- Relay analyis i now more meaningful on mobile
+
+# 1.6.0
+
+- Add Follow Packs!
+- You can now filter poll results with follow pack!
+- Added Relay analysis in settings
+- See which relays a post was found on!
+- See details of relays published on and errors while posting notes/polls/DMs
+
 # 1.5.2
 
 - Make pollerama gossip compliant

@@ -138,7 +138,7 @@ const RepostButton: React.FC<RepostButtonProps> = ({ event }) => {
           <ListItemIcon>
             <FormatQuoteIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText>Quote Post</ListItemText>
+          <ListItemText>{event.kind === 1068 ? "Quote Poll" : "Quote Post"}</ListItemText>
         </MenuItem>
       </Menu>
       {quoteDialogOpen && (

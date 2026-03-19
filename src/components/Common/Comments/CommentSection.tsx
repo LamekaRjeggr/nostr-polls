@@ -5,10 +5,16 @@ import {
   Card,
   CardContent,
   CardHeader,
+  IconButton,
+  Menu,
+  MenuItem,
   Typography,
   Collapse,
   Box,
 } from "@mui/material";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import CellTowerIcon from "@mui/icons-material/CellTower";
+import FlagIcon from "@mui/icons-material/Flag";
 import { useAppContext } from "../../../hooks/useAppContext";
 import { signEvent } from "../../../nostr";
 import { useRelays } from "../../../hooks/useRelays";
@@ -25,6 +31,118 @@ import { NOTIFICATION_MESSAGES } from "../../../constants/notifications";
 import { pool, nostrRuntime } from "../../../singletons";
 import { SubscriptionHandle } from "../../../nostrRuntime/types";
 import { FeedbackMenu } from "../../FeedbackMenu";
+import { RelaySourceModal } from "../RelaySourceModal";
+import { useEventRelays } from "../../../hooks/useEventRelays";
+import { useReports } from "../../../hooks/useReports";
+import { ReportDialog } from "../../Report/ReportDialog";
+import { ReportReason } from "../../../contexts/reports-context";
+import { getAppBaseUrl } from "../../../utils/platform";
+
+// ── Per-comment card with context menu ──────────────────────────────────────
+interface CommentCardProps {
+  comment: Event;
+  depth: number;
+  onReply: (id: string) => void;
+  children?: React.ReactNode;
+}
+
+const CommentCard: React.FC<CommentCardProps> = ({ comment, depth, onReply, children }) => {
+  const { profiles, fetchUserProfileThrottled } = useAppContext();
+  const { user } = useUserContext();
+  const eventRelays = useEventRelays(comment.id);
+  const { reportEvent, reportUser } = useReports();
+
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [relayModalOpen, setRelayModalOpen] = useState(false);
+  const [reportPostOpen, setReportPostOpen] = useState(false);
+  const [reportUserOpen, setReportUserOpen] = useState(false);
+
+  const commentUser = profiles?.get(comment.pubkey);
+  if (!commentUser) fetchUserProfileThrottled(comment.pubkey);
+
+  const handleCopyNevent = () => {
+    navigator.clipboard.writeText(nip19.neventEncode({ id: comment.id }));
+    setMenuAnchor(null);
+  };
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(`${getAppBaseUrl()}/note/${nip19.neventEncode({ id: comment.id })}`);
+    setMenuAnchor(null);
+  };
+  const handleCopyNpub = () => {
+    navigator.clipboard.writeText(nip19.npubEncode(comment.pubkey));
+    setMenuAnchor(null);
+  };
+
+  const authorName =
+    commentUser?.name ||
+    (() => { const n = nip19.npubEncode(comment.pubkey); return n.slice(0, 10) + "..."; })();
+
+  return (
+    <>
+      <Card variant="outlined" style={{ marginTop: "8px" }}>
+        <CardHeader
+          avatar={<Avatar src={commentUser?.picture || DEFAULT_IMAGE_URL} />}
+          title={authorName}
+          subheader={calculateTimeAgo(comment.created_at)}
+          action={
+            <IconButton size="small" onClick={(e) => setMenuAnchor(e.currentTarget)}>
+              <MoreVertIcon fontSize="small" />
+            </IconButton>
+          }
+        />
+        <CardContent style={{ marginLeft: "8px", padding: "8px" }}>
+          <Typography>
+            <TextWithImages content={comment.content} tags={comment.tags} />
+          </Typography>
+        </CardContent>
+
+        <Box sx={{ px: 1, pb: 1 }}>
+          <FeedbackMenu event={comment} depth={depth + 1} />
+        </Box>
+
+        {children}
+      </Card>
+
+      <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
+        {eventRelays.length > 0 && (
+          <MenuItem onClick={() => { setRelayModalOpen(true); setMenuAnchor(null); }} sx={{ gap: 1 }}>
+            <CellTowerIcon fontSize="small" />
+            Found on {eventRelays.length} relay{eventRelays.length !== 1 ? "s" : ""}
+          </MenuItem>
+        )}
+        <MenuItem onClick={handleCopyNevent}>Copy Event Id</MenuItem>
+        <MenuItem onClick={handleCopyLink}>Copy Link</MenuItem>
+        <MenuItem onClick={handleCopyNpub}>Copy Author npub</MenuItem>
+        {user && (
+          <MenuItem onClick={() => { setMenuAnchor(null); setReportPostOpen(true); }} sx={{ color: "error.main" }}>
+            <FlagIcon fontSize="small" sx={{ mr: 1 }} />
+            Report post
+          </MenuItem>
+        )}
+        {user && (
+          <MenuItem onClick={() => { setMenuAnchor(null); setReportUserOpen(true); }} sx={{ color: "error.main" }}>
+            <FlagIcon fontSize="small" sx={{ mr: 1 }} />
+            Report user
+          </MenuItem>
+        )}
+      </Menu>
+
+      <RelaySourceModal open={relayModalOpen} onClose={() => setRelayModalOpen(false)} relays={eventRelays} />
+      <ReportDialog
+        open={reportPostOpen}
+        onClose={() => setReportPostOpen(false)}
+        onSubmit={(reason: ReportReason, content: string) => { reportEvent(comment.id, comment.pubkey, reason, content); setReportPostOpen(false); }}
+        title="Report post"
+      />
+      <ReportDialog
+        open={reportUserOpen}
+        onClose={() => setReportUserOpen(false)}
+        onSubmit={(reason: ReportReason, content: string) => { reportUser(comment.pubkey, reason, content); setReportUserOpen(false); }}
+        title="Report user"
+      />
+    </>
+  );
+};
 
 interface CommentSectionProps {
   eventId: string;
@@ -39,8 +157,6 @@ const CommentSection: React.FC<CommentSectionProps> = ({
 }) => {
   const { showNotification } = useNotification();
   const {
-    profiles,
-    fetchUserProfileThrottled,
     fetchCommentsThrottled,
     commentsMap,
     addEventToMap,
@@ -122,37 +238,13 @@ const CommentSection: React.FC<CommentSectionProps> = ({
         );
       })
       .map((comment) => {
-        const commentUser = profiles?.get(comment.pubkey);
-        if (!commentUser) fetchUserProfileThrottled(comment.pubkey);
-
         const hasReplies = comments.some((c) =>
           c.tags.some((tag) => tag[3] === "reply" && tag[1] === comment.id)
         );
 
         return (
           <div key={comment.id} style={{ marginLeft: "8px" }}>
-            <Card variant="outlined" style={{ marginTop: "8px" }}>
-              <CardHeader
-                avatar={
-                  <Avatar src={commentUser?.picture || DEFAULT_IMAGE_URL} />
-                }
-                title={
-                  profiles?.get(comment.pubkey)?.name ||
-                  nip19.npubEncode(comment.pubkey).substring(0, 10) + "..."
-                }
-                subheader={calculateTimeAgo(comment.created_at)}
-              />
-              <CardContent style={{ marginLeft: "8px", padding: "8px" }}>
-                <Typography>
-                  <TextWithImages content={comment.content} tags={comment.tags} />
-                </Typography>
-              </CardContent>
-
-              {/* Full FeedbackMenu on each comment */}
-              <Box sx={{ px: 1, pb: 1 }}>
-                <FeedbackMenu event={comment} depth={depth + 1} />
-              </Box>
-
+            <CommentCard comment={comment} depth={depth} onReply={setReplyTo}>
               {/* Show/Hide Replies Button */}
               {hasReplies && (
                 <Box sx={{ px: 2, pb: 1 }}>
@@ -171,13 +263,11 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                       fontSize: "0.75rem",
                     })}
                   >
-                    {showReplies.get(comment.id)
-                      ? "Hide Replies"
-                      : "Show Replies"}
+                    {showReplies.get(comment.id) ? "Hide Replies" : "Show Replies"}
                   </Button>
                 </Box>
               )}
-            </Card>
+            </CommentCard>
 
             {/* Reply input when this comment is selected for replying */}
             <Collapse in={replyTo === comment.id} timeout={200} unmountOnExit>

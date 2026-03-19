@@ -120,22 +120,24 @@ export function ListProvider({ children }: { children: ReactNode }) {
       kinds: [3],
       authors: [user.pubkey],
     };
-    nostrRuntime.subscribe(relays, [contactListFilter], {
+    const contactHandle = nostrRuntime.subscribe(relays, [contactListFilter], {
       onEvent: (event: Event) => {
-        console.log("Got contact event with filter", event, contactListFilter);
         handleContactListEvent(event);
       },
+      onEose: () => contactHandle.unsubscribe(),
     });
   };
 
   const fetchLists = () => {
     // Packs I created
-    nostrRuntime.subscribe(relays, [{ kinds: [39089], limit: 100, authors: [user!.pubkey] }], {
+    const myPacksHandle = nostrRuntime.subscribe(relays, [{ kinds: [39089], limit: 100, authors: [user!.pubkey] }], {
       onEvent: handleListEvent,
+      onEose: () => myPacksHandle.unsubscribe(),
     });
     // Packs I'm mentioned in
-    nostrRuntime.subscribe(relays, [{ kinds: [39089], limit: 100, "#p": [user!.pubkey] }], {
+    const mentionedPacksHandle = nostrRuntime.subscribe(relays, [{ kinds: [39089], limit: 100, "#p": [user!.pubkey] }], {
       onEvent: handleListEvent,
+      onEose: () => mentionedPacksHandle.unsubscribe(),
     });
   };
 
@@ -145,10 +147,10 @@ export function ListProvider({ children }: { children: ReactNode }) {
       const pubkey = parts[1];
       const identifier = parts.slice(2).join(":");
       if (!pubkey) return;
-      nostrRuntime.subscribe(
+      const packHandle = nostrRuntime.subscribe(
         relays,
         [{ kinds: [39089], authors: [pubkey], "#d": [identifier], limit: 1 }],
-        { onEvent: handleListEvent }
+        { onEvent: handleListEvent, onEose: () => packHandle.unsubscribe() }
       );
     });
   };
@@ -187,7 +189,7 @@ export function ListProvider({ children }: { children: ReactNode }) {
 
   const fetchBookmarks = () => {
     if (!user) return;
-    nostrRuntime.subscribe(relays, [{ kinds: [10003], authors: [user.pubkey], limit: 1 }], {
+    const bookmarksHandle = nostrRuntime.subscribe(relays, [{ kinds: [10003], authors: [user.pubkey], limit: 1 }], {
       onEvent: (event) => {
         setBookmarks10003((prev) => {
           if (!prev || event.created_at > prev.created_at) {
@@ -197,6 +199,7 @@ export function ListProvider({ children }: { children: ReactNode }) {
           return prev;
         });
       },
+      onEose: () => bookmarksHandle.unsubscribe(),
     });
   };
 

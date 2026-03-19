@@ -10,6 +10,8 @@ import {
 } from "react-router-dom";
 
 import { StatusBar, Style } from "@capacitor/status-bar";
+import { App as CapApp } from "@capacitor/app";
+import { Capacitor } from "@capacitor/core";
 import { nostrRuntime } from "./singletons";
 
 import { EventCreator } from "./components/EventCreator";
@@ -180,18 +182,36 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Reconnect relay subscriptions when the app returns from background/idle
+
+  // Reconnect relay subscriptions when the app returns from background.
+  // WebSocket connections are killed by the OS when backgrounded — especially
+  // on mobile/Capacitor where the WebView is aggressively throttled.
+  // We use Capacitor's appStateChange on native and visibilitychange on web,
+  // and always reconnect on foreground (no idle threshold) so publish never
+  // hits a dead connection.
   useEffect(() => {
-    let hiddenAt = 0;
-    const onVisibilityChange = () => {
-      if (document.hidden) {
-        hiddenAt = Date.now();
-      } else if (hiddenAt && Date.now() - hiddenAt > 30_000) {
-        nostrRuntime.reconnect();
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+    if (Capacitor.isNativePlatform()) {
+      // Native: Capacitor fires appStateChange reliably on Android/iOS
+      let listener: Awaited<ReturnType<typeof CapApp.addListener>> | null = null;
+      CapApp.addListener("appStateChange", ({ isActive }) => {
+        if (isActive) nostrRuntime.reconnect();
+      }).then((l) => { listener = l; });
+      // Also handle network coming back online (e.g. WiFi → cellular switch)
+      const onOnline = () => nostrRuntime.reconnect();
+      window.addEventListener("online", onOnline);
+      return () => {
+        listener?.remove();
+        window.removeEventListener("online", onOnline);
+      };
+    } else {
+      // Web: visibilitychange is reliable; reconnect whenever tab becomes visible
+      const onVisibilityChange = () => {
+        if (!document.hidden) nostrRuntime.reconnect();
+      };
+      document.addEventListener("visibilitychange", onVisibilityChange);
+      window.addEventListener("online", () => nostrRuntime.reconnect());
+      return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+    }
   }, []);
 
   return (

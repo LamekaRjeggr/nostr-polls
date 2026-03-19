@@ -176,16 +176,39 @@ export interface GossipRelayEntry {
 }
 
 /**
- * Return the union of the user's own relays and any cached outbox relays for
- * a set of authors. This is what you pass to a subscription when you want to
- * read content from those authors using the gossip model.
+ * Max gossip relays to connect to beyond the user's own relays.
+ * Mobile devices handle far fewer concurrent WebSocket connections than desktop.
+ * We pick the most popular relays (used by the most follows) to maximise coverage
+ * while keeping the connection count manageable.
+ */
+const MAX_GOSSIP_RELAYS = 20;
+
+/**
+ * Return the user's own relays plus the most-popular outbox relays for a set
+ * of authors, capped at MAX_GOSSIP_RELAYS extra relays (scored by how many
+ * authors publish there). This is what you pass to a subscription when you
+ * want to read content from those authors using the gossip model.
  */
 export function getRelaysForAuthors(userRelays: string[], authors: string[]): string[] {
-  const all = new Set(userRelays);
+  const userRelaySet = new Set(userRelays);
+
+  // Count how many authors publish to each relay
+  const score = new Map<string, number>();
   for (const pubkey of authors) {
-    for (const url of getCachedOutboxRelays(pubkey)) all.add(url);
+    for (const url of getCachedOutboxRelays(pubkey)) {
+      if (!userRelaySet.has(url)) {
+        score.set(url, (score.get(url) ?? 0) + 1);
+      }
+    }
   }
-  return Array.from(all);
+
+  // Take the top MAX_GOSSIP_RELAYS by author count
+  const topGossip = Array.from(score.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, MAX_GOSSIP_RELAYS)
+    .map(([url]) => url);
+
+  return [...userRelays, ...topGossip];
 }
 
 /**

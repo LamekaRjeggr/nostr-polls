@@ -1,5 +1,5 @@
 import { Event } from "nostr-tools";
-import { pool } from "../singletons";
+import { pool, nostrRuntime } from "../singletons";
 import { getNip65InboxRelays } from "../nostr/OutboxService";
 
 const PUBLISH_TIMEOUT_MS = 5000;
@@ -21,23 +21,18 @@ export interface PublishResult {
   relayResults: RelayPublishResult[];
 }
 
-export async function waitForPublish(
+async function attemptPublish(
   relays: string[],
-  event: Event
-): Promise<PublishResult> {
-  const total = relays.length;
-  if (total === 0) return { ok: false, accepted: 0, total: 0, relayResults: [] };
-
+  event: Event,
+  globalStart: number,
+): Promise<RelayPublishResult[]> {
   const promises = pool.publish(relays, event);
-  const globalStart = Date.now();
-
-  // Wrap each promise individually to capture per-relay latency.
-  // Each inner promise always resolves (never throws) so Promise.all works cleanly.
-  const relayResults: RelayPublishResult[] = await Promise.all(
+  return Promise.all(
     promises.map((p, i) => {
       const relayStart = Date.now();
+      const remaining = PUBLISH_TIMEOUT_MS - (Date.now() - globalStart);
       const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("timeout")), PUBLISH_TIMEOUT_MS - (Date.now() - globalStart))
+        setTimeout(() => reject(new Error("timeout")), Math.max(remaining, 500))
       );
       return Promise.race([p, timeout])
         .then((msg): RelayPublishResult => ({
@@ -57,6 +52,29 @@ export async function waitForPublish(
         });
     })
   );
+}
+
+export async function waitForPublish(
+  relays: string[],
+  event: Event
+): Promise<PublishResult> {
+  const total = relays.length;
+  if (total === 0) return { ok: false, accepted: 0, total: 0, relayResults: [] };
+
+  const globalStart = Date.now();
+  let relayResults = await attemptPublish(relays, event, globalStart);
+
+  // If every relay failed with a websocket error (dead connections, not relay
+  // rejections), trigger a reconnect and retry once. This handles the case
+  // where the OS killed WebSocket connections while the app was backgrounded.
+  const allWebsocketErrors = relayResults.every(
+    (r) => r.status === "rejected" && r.message?.toLowerCase().includes("websocket")
+  );
+  if (allWebsocketErrors) {
+    nostrRuntime.reconnect();
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    relayResults = await attemptPublish(relays, event, globalStart);
+  }
 
   const accepted = relayResults.filter((r) => r.status === "accepted").length;
   return { ok: accepted > 0, accepted, total, relayResults };

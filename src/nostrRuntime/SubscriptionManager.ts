@@ -22,10 +22,32 @@ export class SubscriptionManager {
   private subscriptions: Map<string, ManagedSubscription> = new Map();
   private pool: SimplePool;
   private eventStore: EventStore;
+  /** How many distinct ManagedSubscriptions are using each relay URL */
+  private relayRefCounts: Map<string, number> = new Map();
 
   constructor(pool: SimplePool, eventStore: EventStore) {
     this.pool = pool;
     this.eventStore = eventStore;
+  }
+
+  private retainRelays(relays: string[]): void {
+    for (const url of relays) {
+      this.relayRefCounts.set(url, (this.relayRefCounts.get(url) ?? 0) + 1);
+    }
+  }
+
+  private releaseRelays(relays: string[]): void {
+    for (const url of relays) {
+      const count = (this.relayRefCounts.get(url) ?? 1) - 1;
+      if (count <= 0) {
+        this.relayRefCounts.delete(url);
+        // Close the underlying WebSocket — no subscriptions need this relay anymore.
+        // nostr-tools will open a fresh connection next time it's needed.
+        this.pool.close([url]);
+      } else {
+        this.relayRefCounts.set(url, count);
+      }
+    }
   }
 
   /**
@@ -177,8 +199,9 @@ export class SubscriptionManager {
       }
     }
 
-    // Store subscription
+    // Store subscription and track relay usage
     this.subscriptions.set(subscriptionId, managedSub);
+    this.retainRelays(relays);
 
     return {
       id: subscriptionId,
@@ -230,6 +253,9 @@ export class SubscriptionManager {
     } else if (subscription.closer) {
       subscription.closer.close();
     }
+
+    // Release relay refcounts — closes the WebSocket if no other subs need it
+    this.releaseRelays(subscription.relays);
 
     // Remove from map
     this.subscriptions.delete(subscriptionId);
@@ -287,6 +313,7 @@ export class SubscriptionManager {
     for (const subscriptionId of Array.from(this.subscriptions.keys())) {
       this.closeSubscription(subscriptionId);
     }
+    this.relayRefCounts.clear();
   }
 
   /**
@@ -296,16 +323,34 @@ export class SubscriptionManager {
    * WebSocket connections may have silently dropped.
    */
   reconnectAll(): void {
-    for (const sub of Array.from(this.subscriptions.values())) {
-      // Close existing pool subscription(s)
+    const subs = Array.from(this.subscriptions.values());
+
+    // 1. Collect all relay URLs used by active subscriptions
+    const allRelays = new Set<string>();
+    for (const sub of subs) {
+      for (const relay of sub.relays) allRelays.add(relay);
+    }
+
+    // 2. Close Nostr-level subscription closers (best-effort CLOSE messages)
+    for (const sub of subs) {
       if (sub.chunks) {
         for (const closer of sub.chunks) {
-          closer.close();
+          try { closer.close(); } catch { /* dead socket, ignore */ }
         }
       } else if (sub.closer) {
-        sub.closer.close();
+        try { sub.closer.close(); } catch { /* dead socket, ignore */ }
       }
+    }
 
+    // 3. Force-close the underlying WebSocket for every relay so ensureRelay()
+    //    creates a fresh connection. Without this, a NAT-killed socket still
+    //    shows readyState === OPEN and pool.subscribeMany silently fails.
+    if (allRelays.size > 0) {
+      this.pool.close(Array.from(allRelays));
+    }
+
+    // 4. Re-create all subscriptions on fresh connections
+    for (const sub of subs) {
       // Reset EOSE and timing state
       sub.eoseReceived = false;
       sub.startedAt = Date.now();

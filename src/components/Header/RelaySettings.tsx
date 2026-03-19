@@ -103,25 +103,19 @@ function GossipRelayTable({
                 />
               </Tooltip>
             </TableCell>
-            <TableCell sx={{ fontFamily: "monospace", fontSize: "0.8rem", wordBreak: "break-all" }}>
-              {entry.url}
-            </TableCell>
-            <TableCell sx={{ width: 120 }}>
-              <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+            <TableCell sx={{ fontFamily: "monospace", fontSize: "0.75rem", wordBreak: "break-all" }}>
+              <Box>{entry.url}</Box>
+              <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mt: 0.5, alignItems: "center" }}>
                 {entry.modes.has("write") && (
-                  <Chip label="outbox" size="small" color="primary" variant="outlined" sx={{ fontSize: "0.65rem", height: 18 }} />
+                  <Chip label="outbox" size="small" color="primary" variant="outlined" sx={{ fontSize: "0.6rem", height: 16 }} />
                 )}
                 {entry.modes.has("read") && (
-                  <Chip label="inbox" size="small" color="secondary" variant="outlined" sx={{ fontSize: "0.65rem", height: 18 }} />
+                  <Chip label="inbox" size="small" color="secondary" variant="outlined" sx={{ fontSize: "0.6rem", height: 16 }} />
                 )}
-              </Box>
-            </TableCell>
-            <TableCell sx={{ width: 80 }}>
-              <Tooltip title={`${entry.pubkeyCount} user${entry.pubkeyCount !== 1 ? "s" : ""} use this relay`}>
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem" }}>
                   {entry.pubkeyCount} user{entry.pubkeyCount !== 1 ? "s" : ""}
                 </Typography>
-              </Tooltip>
+              </Box>
             </TableCell>
           </TableRow>
         ))}

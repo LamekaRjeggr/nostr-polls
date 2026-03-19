@@ -19,7 +19,7 @@ import { NOTIFICATION_MESSAGES } from "../../constants/notifications";
 import { NOSTR_EVENT_KINDS } from "../../constants/nostr";
 import { signEvent } from "../../nostr";
 import { useRelays } from "../../hooks/useRelays";
-import { Event } from "nostr-tools";
+import { Event, nip19 } from "nostr-tools";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
@@ -38,7 +38,9 @@ const UPLOAD_PLACEHOLDER = "[uploading…]";
 const NoteTemplateForm: React.FC<{
   eventContent: string;
   setEventContent: (val: string) => void;
-}> = ({ eventContent, setEventContent }) => {
+  quotedEvent?: Event;
+  onPublished?: () => void;
+}> = ({ eventContent, setEventContent, quotedEvent, onPublished }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
   const [diagnosticOpen, setDiagnosticOpen] = useState(false);
@@ -132,14 +134,26 @@ const NoteTemplateForm: React.FC<{
         showNotification(NOTIFICATION_MESSAGES.EMPTY_NOTE_CONTENT, "error");
         return;
       }
+      let finalContent = eventContent;
+      const quoteTags: string[][] = [];
+      if (quotedEvent) {
+        try {
+          const neventId = nip19.neventEncode({ id: quotedEvent.id, relays: relays.slice(0, 2), kind: quotedEvent.kind });
+          finalContent = `${eventContent}\n\nnostr:${neventId}`;
+          quoteTags.push(["q", quotedEvent.id, relays[0] || ""]);
+          quoteTags.push(["p", quotedEvent.pubkey]);
+        } catch { /* skip if encoding fails */ }
+      }
+
       const mentionTags = extractMentionTags(eventContent);
       const noteEvent = {
         kind: NOSTR_EVENT_KINDS.TEXT_NOTE,
-        content: eventContent,
+        content: finalContent,
         tags: [
           ...relays.map((relay) => ["relay", relay]),
           ...topics.map((tag) => ["t", tag]),
           ...mentionTags,
+          ...quoteTags,
         ],
         created_at: Math.floor(Date.now() / 1000),
       };
@@ -156,6 +170,8 @@ const NoteTemplateForm: React.FC<{
       setDiagnosticOpen(true);
       if (!result.ok) {
         showNotification(NOTIFICATION_MESSAGES.NOTE_PUBLISH_NO_RELAY, "error");
+      } else if (onPublished) {
+        onPublished();
       }
     } catch (error) {
       setIsSubmitting(false);
@@ -372,7 +388,7 @@ const NoteTemplateForm: React.FC<{
           open={diagnosticOpen}
           onClose={() => {
             setDiagnosticOpen(false);
-            if (publishResult.ok) navigate("/feeds/notes");
+            if (publishResult.ok && !onPublished) navigate("/feeds/notes");
           }}
           title="Note publish results"
           entries={publishResult.relayResults}

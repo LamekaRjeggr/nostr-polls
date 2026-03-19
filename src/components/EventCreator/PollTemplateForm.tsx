@@ -33,7 +33,7 @@ import { NOSTR_EVENT_KINDS } from "../../constants/nostr";
 import { signEvent } from "../../nostr";
 import { useRelays } from "../../hooks/useRelays";
 import { PollPreview } from "./PollPreview";
-import { Event } from "nostr-tools";
+import { Event, nip19 } from "nostr-tools";
 import { publishWithGossip, PublishResult } from "../../utils/publish";
 import { PublishDiagnosticModal } from "../Common/PublishDiagnosticModal";
 import { extractHashtags } from "../../utils/common";
@@ -64,7 +64,9 @@ const pollOptions = [
 const PollTemplateForm: React.FC<{
   eventContent: string;
   setEventContent: (val: string) => void;
-}> = ({ eventContent, setEventContent }) => {
+  quotedEvent?: Event;
+  onPublished?: () => void;
+}> = ({ eventContent, setEventContent, quotedEvent, onPublished }) => {
   const [showPreview, setShowPreview] = useState(false);
   const [options, setOptions] = useState<Option[]>([
     [generateOptionId(), ""],
@@ -119,15 +121,28 @@ const PollTemplateForm: React.FC<{
         return;
       }
 
+      // If quoting another event, embed its nevent reference in the content
+      let finalContent = eventContent;
+      const quoteTags: string[][] = [];
+      if (quotedEvent) {
+        try {
+          const neventId = nip19.neventEncode({ id: quotedEvent.id, relays: relays.slice(0, 2), kind: quotedEvent.kind });
+          finalContent = `${eventContent}\n\nnostr:${neventId}`;
+          quoteTags.push(["q", quotedEvent.id, relays[0] || ""]);
+          quoteTags.push(["p", quotedEvent.pubkey]);
+        } catch { /* skip if encoding fails */ }
+      }
+
       const mentionTags = extractMentionTags(eventContent);
       const pollEvent = {
         kind: NOSTR_EVENT_KINDS.POLL,
-        content: eventContent,
+        content: finalContent,
         tags: [
           ...options.map((option: Option) => ["option", option[0], option[1]]),
           ...relays.map((relay) => ["relay", relay]),
           ...topics.map((tag) => ["t", tag]),
           ...mentionTags,
+          ...quoteTags,
         ],
         created_at: Math.floor(Date.now() / 1000),
       };
@@ -150,6 +165,8 @@ const PollTemplateForm: React.FC<{
       setDiagnosticOpen(true);
       if (!result.ok) {
         showNotification(NOTIFICATION_MESSAGES.POLL_PUBLISH_NO_RELAY, "error");
+      } else if (onPublished) {
+        onPublished();
       }
     } catch (error) {
       setIsSubmitting(false);
@@ -326,7 +343,7 @@ const PollTemplateForm: React.FC<{
           open={diagnosticOpen}
           onClose={() => {
             setDiagnosticOpen(false);
-            if (publishResult.ok) navigate("/feeds/polls");
+            if (publishResult.ok && !onPublished) navigate("/feeds/polls");
           }}
           title="Poll publish results"
           entries={publishResult.relayResults}

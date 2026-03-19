@@ -23,14 +23,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       <Box
         sx={{
           position: "absolute",
-          top: "10%",
-          left: "10%",
-          width: "80%",
-          borderRadius: 2,
+          top: { xs: 0, sm: "10%" },
+          left: { xs: 0, sm: "10%" },
+          width: { xs: "100%", sm: "80%" },
+          height: { xs: "100%", sm: "auto" },
+          maxHeight: { xs: "100%", sm: "80vh" },
+          borderRadius: { xs: 0, sm: 2 },
           backgroundColor:
             theme.palette.mode === "dark" ? "#000000" : "#ffffff",
           boxShadow: 24,
-          p: 4,
+          p: { xs: 2, sm: 4 },
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
         }}
       >
         <Typography variant="h6" gutterBottom>
@@ -40,7 +45,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <Tabs
           value={tabIndex}
           onChange={(_, newVal) => setTabIndex(newVal)}
-          sx={{ mb: 2 }}
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{ mb: 2, minHeight: 36 }}
         >
           <Tab label="Relay Settings" />
           <Tab label="Relay Analytics" />
@@ -49,11 +56,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <Tab label="Moderation" />
         </Tabs>
 
-        {tabIndex === 0 && <RelaySettings />}
-        {tabIndex === 1 && <RelayAnalytics />}
-        {tabIndex === 2 && <AISettings />}
-        {tabIndex === 3 && <BlossomSettings />}
-        {tabIndex === 4 && <ModerationSettings />}
+        <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden" }}>
+          {tabIndex === 0 && <RelaySettings />}
+          {tabIndex === 1 && <RelayAnalytics />}
+          {tabIndex === 2 && <AISettings />}
+          {tabIndex === 3 && <BlossomSettings />}
+          {tabIndex === 4 && <ModerationSettings />}
+        </Box>
       </Box>
     </Modal>
   );
