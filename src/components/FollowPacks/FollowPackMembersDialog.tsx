@@ -21,6 +21,7 @@ import { DEFAULT_IMAGE_URL } from "../../utils/constants";
 import { Nip05Badge } from "../Common/Nip05Badge";
 import { openProfileTab } from "../../nostr";
 import { useNavigate } from "react-router-dom";
+import { useBackClose } from "../../hooks/useBackClose";
 
 interface FollowPackMembersDialogProps {
   open: boolean;
@@ -38,6 +39,7 @@ export const FollowPackMembersDialog: React.FC<FollowPackMembersDialogProps> = (
   const { profiles, fetchUserProfileThrottled } = useAppContext();
   const { user } = useUserContext();
   const navigate = useNavigate();
+  useBackClose(open, onClose);
 
   useEffect(() => {
     if (!open) return;

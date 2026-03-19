@@ -1,4 +1,5 @@
 import { Box, Button, Modal, Typography } from "@mui/material";
+import { useBackClose } from "../../hooks/useBackClose";
 
 interface ProofofWorkModalInterface {
   show: boolean;
@@ -16,6 +17,8 @@ export const ProofofWorkModal: React.FC<ProofofWorkModalInterface> = ({
   onCancel,
   progress
 }) => {
+
+  useBackClose(show, onCancel);
 
   const cancelMining = () => {
     onCancel()

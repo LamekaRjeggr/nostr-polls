@@ -94,7 +94,7 @@ export class NostrRuntime {
     filters: Filter[],
     options?: SubscribeOptions
   ): SubscriptionHandle {
-    const { onEvent, onEose, localOnly } = options || {};
+    const { onEvent, onEose, localOnly, fresh } = options || {};
 
     // If localOnly, just query cache and return
     if (localOnly) {
@@ -120,8 +120,8 @@ export class NostrRuntime {
       };
     }
 
-    // First, deliver cached events immediately
-    if (onEvent) {
+    // Deliver cached events immediately (skip when fresh — caller wants network-only data)
+    if (onEvent && !fresh) {
       for (const filter of filters) {
         const cachedEvents = this.eventStore.query(filter);
         for (const event of cachedEvents) {
@@ -130,12 +130,16 @@ export class NostrRuntime {
       }
     }
 
-    // Then create network subscription
+    // Create network subscription.
+    // When fresh=true, append a nonce to bypass deduplication so we always
+    // get a brand-new relay subscription instead of piggybacking on an
+    // existing one that may be on a stale/dead WebSocket.
     const { id, unsubscribe } = this.subscriptionManager.subscribe(
       relays,
       filters,
       onEvent,
-      onEose
+      onEose,
+      fresh ? `fresh-${Date.now()}-${Math.random()}` : undefined
     );
 
     return { id, unsubscribe };
@@ -356,6 +360,7 @@ export class NostrRuntime {
   reconnect(): void {
     this.subscriptionManager.reconnectAll();
   }
+
 
   /**
    * Cleanup - close all subscriptions and clear store

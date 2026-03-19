@@ -13,6 +13,7 @@ import {
 } from "@mui/material";
 import { useState } from "react";
 import { ReportReason } from "../../contexts/reports-context";
+import { useBackClose } from "../../hooks/useBackClose";
 
 const REASONS: { value: ReportReason; label: string }[] = [
   { value: "spam", label: "Spam" },
@@ -39,6 +40,7 @@ export function ReportDialog({
 }: ReportDialogProps) {
   const [reason, setReason] = useState<ReportReason>("spam");
   const [content, setContent] = useState("");
+  useBackClose(open, onClose);
 
   const handleSubmit = () => {
     onSubmit(reason, content);

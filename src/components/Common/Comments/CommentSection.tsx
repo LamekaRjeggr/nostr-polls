@@ -28,8 +28,10 @@ import { extractMentionTags } from '../../EventCreator/MentionTextArea';
 import { getColorsWithTheme } from "../../../styles/theme";
 import { useNotification } from "../../../contexts/notification-context";
 import { NOTIFICATION_MESSAGES } from "../../../constants/notifications";
-import { pool, nostrRuntime } from "../../../singletons";
+import { nostrRuntime } from "../../../singletons";
 import { SubscriptionHandle } from "../../../nostrRuntime/types";
+import { publishWithGossip, PublishResult } from "../../../utils/publish";
+import { PublishDiagnosticModal } from "../PublishDiagnosticModal";
 import { FeedbackMenu } from "../../FeedbackMenu";
 import { RelaySourceModal } from "../RelaySourceModal";
 import { useEventRelays } from "../../../hooks/useEventRelays";
@@ -166,9 +168,11 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   const [showReplies, setShowReplies] = useState<Map<string, boolean>>(
     new Map()
   );
+  const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
+  const [diagnosticOpen, setDiagnosticOpen] = useState(false);
 
   const { user } = useUserContext();
-  const { relays } = useRelays();
+  const { relays, writeRelays } = useRelays();
 
   const fetchComments = () => {
     let filter = {
@@ -217,7 +221,18 @@ const CommentSection: React.FC<CommentSectionProps> = ({
     };
 
     const signedComment = await signEvent(commentEvent, user.privateKey);
-    pool.publish(relays, signedComment!);
+    if (!signedComment) return;
+
+    const result = await publishWithGossip(writeRelays, signedComment);
+    setPublishResult(result);
+    setDiagnosticOpen(true);
+
+    if (result.ok) {
+      showNotification("Comment published!", "success");
+      addEventToMap(signedComment);
+    } else {
+      showNotification("Comment failed to publish to any relay", "error");
+    }
     setReplyTo(null);
   };
 
@@ -316,6 +331,15 @@ const CommentSection: React.FC<CommentSectionProps> = ({
         )}
         {renderComments(Array.from(localCommentsMap.values()), null)}
       </div>
+
+      {publishResult && (
+        <PublishDiagnosticModal
+          open={diagnosticOpen}
+          onClose={() => setDiagnosticOpen(false)}
+          title="Comment publish results"
+          entries={publishResult.relayResults}
+        />
+      )}
     </div>
   );
 };

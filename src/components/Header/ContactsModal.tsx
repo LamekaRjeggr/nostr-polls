@@ -23,6 +23,7 @@ import { useNavigate } from "react-router-dom";
 import { signEvent } from "../../nostr";
 import { pool } from "../../singletons";
 import { Nip05Badge } from "../Common/Nip05Badge";
+import { useBackClose } from "../../hooks/useBackClose";
 
 interface ContactsModalProps {
   open: boolean;
@@ -38,6 +39,7 @@ export const ContactsModal: React.FC<ContactsModalProps> = ({
   const { fetchLatestContactList } = useListContext();
   const { relays } = useRelays();
   const navigate = useNavigate();
+  useBackClose(open, onClose);
   const [loading, setLoading] = useState(true);
   const [unfollowingPubkey, setUnfollowingPubkey] = useState<string | null>(null);
 

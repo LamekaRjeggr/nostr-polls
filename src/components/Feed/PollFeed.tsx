@@ -152,13 +152,14 @@ export const PollFeed = () => {
 
   // Helper to subscribe - runtime handles chunking automatically for large author lists
   const subscribeWithAuthors = useCallback(
-    (filters: Filter[], onAllChunksComplete?: () => void, relayOverride?: string[]) => {
+    (filters: Filter[], onAllChunksComplete?: () => void, relayOverride?: string[], fresh?: boolean) => {
       const targetRelays = relayOverride ?? relays;
       const handle = nostrRuntime.subscribe(targetRelays, filters, {
         onEvent: handleIncomingEvent,
         onEose: () => {
           onAllChunksComplete?.();
         },
+        fresh,
       });
 
       // Return a wrapper that matches the old API
@@ -212,18 +213,7 @@ export const PollFeed = () => {
     setFeedSubscription(closer);
   };
 
-  const refreshFeed = useCallback(() => {
-    if (feedSubscription) feedSubscription.unsubscribe();
-    setPollEvents([]);
-    setRepostEvents([]);
-    setPendingPollEvents([]);
-    setLoadingInitial(true);
-    loadingInitialRef.current = true;
-    const closer = fetchInitialPolls();
-    setFeedSubscription(closer);
-  }, [eventSource]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const fetchInitialPolls = () => {
+  const fetchInitialPolls = useCallback((fresh?: boolean) => {
     const filterPolls: Filter = {
       kinds: [KIND_POLL],
       limit: 40,
@@ -255,10 +245,22 @@ export const PollFeed = () => {
 
     const closer = subscribeWithAuthors([filterPolls, filterResposts], () => {
       setLoadingInitial(false);
-    }, gossipRelays);
+    }, gossipRelays, fresh);
 
     return closer;
-  };
+  }, [eventSource, user, relays, subscribeWithAuthors]);
+
+  const refreshFeed = useCallback(() => {
+    if (feedSubscription) feedSubscription.unsubscribe();
+    setPollEvents([]);
+    setRepostEvents([]);
+    setPendingPollEvents([]);
+    setLoadingInitial(true);
+    loadingInitialRef.current = true;
+    // fresh=true: skip cache replay, bypass dedup, always create new network subscription
+    const closer = fetchInitialPolls(true);
+    setFeedSubscription(closer);
+  }, [feedSubscription, fetchInitialPolls]);
 
   const pollForNewPolls = () => {
     const since = pollEvents[0]?.created_at || Math.floor(Date.now() / 1000);

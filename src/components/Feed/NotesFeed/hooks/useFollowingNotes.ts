@@ -95,7 +95,7 @@ export const useFollowingNotes = () => {
   }, [relays, user?.follows]);
 
   // Load older notes (pagination down) or initial load
-  const fetchNotes = async () => {
+  const fetchNotes = useCallback(async (fresh?: boolean) => {
     if (!user?.follows?.length || loadingMore) return;
     setLoadingMore(true);
     const authors = Array.from(user.follows);
@@ -104,20 +104,25 @@ export const useFollowingNotes = () => {
     const gossipRelays = getRelaysForAuthors(relays, authors);
 
     const noteFilter: Filter = { kinds: [1], authors, limit: 10 };
-    const currentNotes = notes();
-    if (currentNotes.size > 0) {
-      noteFilter.until = Array.from(currentNotes.values()).sort(
-        (a, b) => a.created_at - b.created_at
-      )[0].created_at;
+    // On a fresh refresh, don't use `until` — fetch the latest from network
+    if (!fresh) {
+      const currentNotes = notes();
+      if (currentNotes.size > 0) {
+        noteFilter.until = Array.from(currentNotes.values()).sort(
+          (a, b) => a.created_at - b.created_at
+        )[0].created_at;
+      }
     }
 
     const repostFilter: Filter = { kinds: [6], authors, limit: 10 };
-    const currentReposts = reposts();
-    if (currentReposts.size > 0) {
-      const oldestRepostTime = Math.min(
-        ...Array.from(currentReposts.values()).flat().map((r) => r.created_at)
-      );
-      repostFilter.until = oldestRepostTime;
+    if (!fresh) {
+      const currentReposts = reposts();
+      if (currentReposts.size > 0) {
+        const oldestRepostTime = Math.min(
+          ...Array.from(currentReposts.values()).flat().map((r) => r.created_at)
+        );
+        repostFilter.until = oldestRepostTime;
+      }
     }
 
     let hasNewEvents = false;
@@ -127,30 +132,26 @@ export const useFollowingNotes = () => {
           const originalNoteId = event.tags.find((t) => t[0] === "e")?.[1];
           if (originalNoteId) missingNotesRef.current.add(originalNoteId);
         }
-        // Mark that we received events; defer the version bump to EOSE so
-        // we don't re-render the list on every individual event (avoids jitter).
         hasNewEvents = true;
       },
       onEose: () => {
         handle.unsubscribe();
-        // Single version bump after all events have been stored, regardless
-        // of scroll position — these are paginated posts, not live updates.
         if (hasNewEvents) setVersion((v) => v + 1);
         startMissingNotesFetcher();
         setLoadingMore(false);
         initialLoadDoneRef.current = true;
       },
+      fresh,
     });
-  };
+  }, [user?.follows, relays, loadingMore, notes, reposts, startMissingNotesFetcher]);
 
   const refreshNotes = useCallback(() => {
     initialLoadDoneRef.current = false;
     missingNotesRef.current.clear();
     setVersion(0);
     setPendingCount(0);
-    // fetchNotes will re-run as a fresh initial load (no `until` filter)
-    fetchNotes();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    fetchNotes(true);
+  }, [fetchNotes]);
 
   return {
     notes: notes(),

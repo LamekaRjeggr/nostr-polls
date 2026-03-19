@@ -15,6 +15,7 @@ import {
 import { Visibility, VisibilityOff } from "@mui/icons-material";
 import { signerManager } from "../../singletons/Signer/SignerManager";
 import { nip19 } from "nostr-tools";
+import { useBackClose } from "../../hooks/useBackClose";
 
 interface Props {
   open: boolean;
@@ -26,6 +27,7 @@ export const NsecLoginModal: React.FC<Props> = ({ open, onClose }) => {
   const [showNsec, setShowNsec] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  useBackClose(open, onClose);
 
   const isValidNsec = (value: string) => {
     try {

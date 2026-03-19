@@ -17,6 +17,7 @@ import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import TimerOffIcon from "@mui/icons-material/TimerOff";
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
+import { useBackClose } from "../../hooks/useBackClose";
 
 export type DiagnosticRelayStatus = "accepted" | "sent" | "rejected" | "failed" | "timeout" | "pending";
 
@@ -94,6 +95,7 @@ export const PublishDiagnosticModal: React.FC<PublishDiagnosticModalProps> = ({
   entries,
   onRetry,
 }) => {
+  useBackClose(open, onClose);
   const accepted = entries.filter((e) => e.status === "accepted" || e.status === "sent").length;
   const failed = entries.filter((e) => e.status === "rejected" || e.status === "failed").length;
   const timedOut = entries.filter((e) => e.status === "timeout").length;

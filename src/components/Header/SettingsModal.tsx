@@ -5,6 +5,7 @@ import { RelayAnalytics } from "./RelayAnalytics";
 import { AISettings } from "./AISettings";
 import { BlossomSettings } from "./BlossomSettings";
 import { ModerationSettings } from "./ModerationSettings";
+import { useBackClose } from "../../hooks/useBackClose";
 
 interface SettingsModalProps {
   open: boolean;
@@ -17,6 +18,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const [tabIndex, setTabIndex] = useState(0);
   const theme = useTheme();
+  useBackClose(open, onClose);
 
   return (
     <Modal open={open} onClose={onClose}>

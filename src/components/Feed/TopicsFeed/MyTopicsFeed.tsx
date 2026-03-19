@@ -22,6 +22,7 @@ import OverlappingAvatars from "../../../components/Common/OverlappingAvatars";
 import { useUserContext } from "../../../hooks/useUserContext";
 import TopicModeratorsDialog from "../../../components/Moderator/TopicModeratorsDialog";
 import UnifiedFeed from "../UnifiedFeed";
+import { useBackClose } from "../../../hooks/useBackClose";
 
 interface MyTopicsFeedProps {
   onNavigateToDiscover?: () => void;
@@ -291,6 +292,7 @@ const ModerationDialog = ({
   onSubmit: (topics: string[]) => void;
 }) => {
   const [selected, setSelected] = useState<string[]>(topics);
+  useBackClose(open, onClose);
 
   useEffect(() => {
     setSelected(topics);

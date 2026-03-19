@@ -16,6 +16,7 @@ import {
 } from "@mui/material";
 import { useAppContext } from "../../hooks/useAppContext";
 import { DEFAULT_IMAGE_URL } from "../../utils/constants";
+import { useBackClose } from "../../hooks/useBackClose";
 
 interface Props {
   open: boolean;
@@ -34,6 +35,7 @@ const ModeratorSelectorDialog: React.FC<Props> = ({
 }) => {
   const [temp, setTemp] = useState<string[]>(selected);
   let { profiles, fetchUserProfileThrottled } = useAppContext();
+  useBackClose(open, onClose);
 
   useEffect(() => {
     setTemp(selected);

@@ -14,6 +14,7 @@ import {
 import { nip19 } from "nostr-tools";
 import { MonospaceDisplay } from "../Login/CreateAccountModal";
 import { hexToBytes } from "@noble/hashes/utils";
+import { useBackClose } from "../../hooks/useBackClose";
 
 interface Props {
   open: boolean;
@@ -28,6 +29,7 @@ export const ViewKeysModal: React.FC<Props> = ({
   pubkey,
   privkey,
 }) => {
+  useBackClose(open, onClose);
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>Your Keys</DialogTitle>

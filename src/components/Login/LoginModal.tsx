@@ -15,6 +15,7 @@ import { isAndroidNative, isNative } from "../../utils/platform";
 import { NsecLoginModal } from "./NsecLoginModal";
 import { NostrSignerPlugin } from "nostr-signer-capacitor-plugin";
 import { SignerAppInfo } from "nostr-signer-capacitor-plugin/dist/esm/definitions";
+import { useBackClose } from "../../hooks/useBackClose";
 
 interface Props {
   open: boolean;
@@ -25,6 +26,7 @@ export const LoginModal: React.FC<Props> = ({ open, onClose }) => {
   const { setUser } = useUserContext();
   const [showCreateAccount, setShowCreateAccount] = useState(false);
   const [showNsecLogin, setShowNsecLogin] = useState(false);
+  useBackClose(open, onClose);
   const [installedSigners, setInstalledSigners] = useState<{
     apps: SignerAppInfo[];
   }>();

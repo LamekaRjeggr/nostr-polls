@@ -59,10 +59,13 @@ export class SubscriptionManager {
     relays: string[],
     filters: Filter[],
     onEvent?: EventCallback,
-    onEose?: EoseCallback
+    onEose?: EoseCallback,
+    nonce?: string
   ): { id: string; unsubscribe: () => void } {
-    // Generate hash for deduplication
-    const subscriptionId = generateFilterHash(filters, relays);
+    // Generate hash for deduplication (nonce makes it unique to bypass dedup)
+    const subscriptionId = nonce
+      ? `${generateFilterHash(filters, relays)}-${nonce}`
+      : generateFilterHash(filters, relays);
 
     // Check if subscription already exists
     const existing = this.subscriptions.get(subscriptionId);
@@ -394,7 +397,8 @@ export class SubscriptionManager {
                     for (const eoseCallback of Array.from(sub.eoseCallbacks)) {
                       eoseCallback();
                     }
-                    sub.eoseCallbacks.clear();
+                    // Don't clear — new subscribers may have added callbacks
+                    // between reconnect and EOSE. They'll be removed on unsubscribe.
                   }
                 },
               }
@@ -429,7 +433,8 @@ export class SubscriptionManager {
                   for (const eoseCallback of Array.from(sub.eoseCallbacks)) {
                     eoseCallback();
                   }
-                  sub.eoseCallbacks.clear();
+                  // Don't clear — new subscribers may have added callbacks
+                  // between reconnect and EOSE. They'll be removed on unsubscribe.
                 }
               },
             }

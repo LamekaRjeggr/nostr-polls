@@ -55,7 +55,7 @@ export const useDiscoverNotes = () => {
         return () => clearInterval(interval);
     }, [initialLoadComplete, relays]);
 
-    const fetchNotes = useCallback((webOfTrust: Set<string>) => {
+    const fetchNotes = useCallback((webOfTrust: Set<string>, fresh?: boolean) => {
         if (!webOfTrust?.size || !relays?.length || fetchedRef.current) return;
 
         fetchedRef.current = true;
@@ -76,16 +76,15 @@ export const useDiscoverNotes = () => {
         let hasNewEvents = false;
         const handle = nostrRuntime.subscribe(relays, [filter], {
             onEvent: () => {
-                // Collect events without triggering per-event re-renders.
                 hasNewEvents = true;
             },
             onEose: () => {
-                // Single version bump once all events have landed in the store.
                 if (hasNewEvents) setVersion((v) => v + 1);
                 setLoadingMore(false);
                 setInitialLoadComplete(true);
                 handle.unsubscribe();
             },
+            fresh,
         });
 
         subscriptionHandleRef.current = handle;
@@ -109,7 +108,7 @@ export const useDiscoverNotes = () => {
         setVersion(0);
         setPendingCount(0);
         setInitialLoadComplete(false);
-        fetchNotes(webOfTrust);
+        fetchNotes(webOfTrust, true);
     }, [fetchNotes]);
 
     return {

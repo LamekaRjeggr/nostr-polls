@@ -13,6 +13,7 @@ import { signEvent } from "../../nostr";
 import { useRelays } from "../../hooks/useRelays";
 import { SimplePool, Event } from "nostr-tools";
 import MovieCard from "./MovieCard";
+import { useBackClose } from "../../hooks/useBackClose";
 
 interface MovieMetadataModalProps {
   open: boolean;
@@ -32,6 +33,7 @@ const MovieMetadataModal: React.FC<MovieMetadataModalProps> = ({
   const [tab, setTab] = useState(0);
   const [previewEvent, setPreviewEvent] = useState<Event>();
   const { relays } = useRelays();
+  useBackClose(open, onClose);
 
   useEffect(() => {
     const initialize = async () => {

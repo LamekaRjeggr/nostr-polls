@@ -18,6 +18,7 @@ import {
 } from "@mui/material";
 import { useAppContext } from "../../hooks/useAppContext";
 import { DEFAULT_IMAGE_URL } from "../../utils/constants";
+import { useBackClose } from "../../hooks/useBackClose";
 
 interface TopicModeratorsDialogProps {
   open: boolean;
@@ -38,6 +39,7 @@ const TopicModeratorsDialog: React.FC<TopicModeratorsDialogProps> = ({
   const [tempSelections, setTempSelections] = useState<Map<string, string[]>>(
     new Map()
   );
+  useBackClose(open, onClose);
 
   useEffect(() => {
     if (!open) return;

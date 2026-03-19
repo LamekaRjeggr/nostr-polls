@@ -12,6 +12,7 @@ import EventJsonCard from "../Event/EventJSONCard";
 import { useRelays } from "../../hooks/useRelays";
 import { Notes } from "../Notes";
 import { nostrRuntime } from "../../singletons";
+import { useBackClose } from "../../hooks/useBackClose";
 
 interface Props {
   open: boolean;
@@ -25,6 +26,7 @@ const RateEventModal: React.FC<Props> = ({ open, onClose, initialEventId }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { relays } = useRelays();
+  useBackClose(open, onClose);
 
   useEffect(() => {
     if (open && initialEventId) {

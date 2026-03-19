@@ -58,6 +58,7 @@ import { useEventRelays } from "../../hooks/useEventRelays";
 import { PublishResult } from "../../utils/publish";
 import PollOptions from "./PollOptions";
 import { usePollResults } from "../../hooks/usePollResults";
+import { useBackClose } from "../../hooks/useBackClose";
 
 interface PollResponseFormProps {
   pollEvent: Event;
@@ -107,6 +108,8 @@ const PollResponseForm: React.FC<PollResponseFormProps> = ({
   const { fetchLatestContactList } = useListContext();
   const { reportEvent, reportUser, isReportedByMe, getWoTReporters, wotReportThreshold, requestUserReportCheck } = useReports();
   const eventRelays = useEventRelays(pollEvent.id);
+  const handleCloseContactWarning = () => setShowContactListWarning(false);
+  useBackClose(showContactListWarning, handleCloseContactWarning);
 
   const difficulty = Number(
     pollEvent.tags.find((t) => t[0] === "PoW")?.[1]

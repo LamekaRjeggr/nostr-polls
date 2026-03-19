@@ -12,6 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 import CellTowerIcon from '@mui/icons-material/CellTower';
+import { useBackClose } from '../../hooks/useBackClose';
 
 interface RelaySourceModalProps {
   open: boolean;
@@ -23,7 +24,9 @@ function hostname(url: string): string {
   try { return new URL(url).hostname; } catch { return url; }
 }
 
-export const RelaySourceModal: React.FC<RelaySourceModalProps> = ({ open, onClose, relays }) => (
+export const RelaySourceModal: React.FC<RelaySourceModalProps> = ({ open, onClose, relays }) => {
+  useBackClose(open, onClose);
+  return (
   <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
     <DialogTitle>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -60,4 +63,5 @@ export const RelaySourceModal: React.FC<RelaySourceModalProps> = ({ open, onClos
       <Button onClick={onClose}>Close</Button>
     </DialogActions>
   </Dialog>
-);
+  );
+};

@@ -16,6 +16,7 @@ import { Notes } from "../../Notes";
 import PollResponseForm from "../../PollResponse/PollResponseForm";
 import NoteTemplateForm from "../../EventCreator/NoteTemplateForm";
 import PollTemplateForm from "../../EventCreator/PollTemplateForm";
+import { useBackClose } from "../../../hooks/useBackClose";
 
 interface QuotePostDialogProps {
   open: boolean;
@@ -27,6 +28,7 @@ const QuotePostDialog: React.FC<QuotePostDialogProps> = ({ open, onClose, event 
   const [mode, setMode] = useState<"note" | "poll">("note");
   const [content, setContent] = useState("");
   const { relays } = useRelays();
+  useBackClose(open, onClose);
 
   const neventId = useMemo(() => {
     if (!event.id || event.id.length !== 64 || !/^[0-9a-f]+$/i.test(event.id)) return null;

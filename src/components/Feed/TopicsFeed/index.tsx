@@ -24,6 +24,7 @@ import MyTopicsFeed from "./MyTopicsFeed";
 import { useUserContext } from "../../../hooks/useUserContext";
 import { useSubNav } from "../../../contexts/SubNavContext";
 import { useGossipContext } from "../../../contexts/GossipContext";
+import { useBackClose } from "../../../hooks/useBackClose";
 
 const TopicsFeed: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"discover" | "myTopics" | "interests">(() => {
@@ -45,6 +46,8 @@ const TopicsFeed: React.FC = () => {
   const isMounted = useRef(true);
   const { setItems, clearItems } = useSubNav();
   const { networkInterests } = useGossipContext();
+  const handleCloseSearch = () => setSearchOpen(false);
+  useBackClose(searchOpen, handleCloseSearch);
 
   const handleTabChange = useCallback((tab: "discover" | "myTopics" | "interests") => {
     localStorage.setItem("pollerama:lastTopicsTab", tab);

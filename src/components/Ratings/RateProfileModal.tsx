@@ -11,6 +11,7 @@ import { nip19, Event } from "nostr-tools";
 import { useRelays } from "../../hooks/useRelays";
 import { nostrRuntime } from "../../singletons";
 import ProfileCard from "../Profile/ProfileCard";
+import { useBackClose } from "../../hooks/useBackClose";
 
 interface RateProfileModalProps {
   open: boolean;
@@ -25,6 +26,7 @@ const RateProfileModal: React.FC<RateProfileModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [profile, setProfile] = useState<Event | null>(null);
   const { relays } = useRelays();
+  useBackClose(open, onClose);
 
   const handleNpubSubmit = async () => {
     setLoading(true);

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Box, Button, Modal, TextField, Typography } from "@mui/material";
 import MovieCard from "../Movies/MovieCard";
+import { useBackClose } from "../../hooks/useBackClose";
 
 interface RateMovieModalProps {
   open: boolean;
@@ -10,6 +11,7 @@ interface RateMovieModalProps {
 const RateMovieModal: React.FC<RateMovieModalProps> = ({ open, onClose }) => {
   const [imdbInput, setImdbInput] = useState("");
   const [selectedImdbId, setSelectedImdbId] = useState<string | null>(null);
+  useBackClose(open, onClose);
 
   const handleSubmit = () => {
     const trimmed = imdbInput.trim();

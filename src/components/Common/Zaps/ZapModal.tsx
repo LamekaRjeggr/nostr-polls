@@ -12,6 +12,7 @@ import {
 import { Close, ContentCopy, OpenInNew } from "@mui/icons-material";
 import { QRCodeSVG } from "qrcode.react";
 import { styled } from "@mui/system";
+import { useBackClose } from "../../../hooks/useBackClose";
 
 interface ZapModalProps {
   open: boolean;
@@ -96,6 +97,7 @@ const ZapModal: React.FC<ZapModalProps> = ({
   const [invoice, setInvoice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
+  useBackClose(open, onClose);
 
   const handleClose = () => {
     setSelectedAmount(100);

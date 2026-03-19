@@ -18,6 +18,7 @@ import { useUserContext } from "../../hooks/useUserContext";
 import { generateSecretKey, getPublicKey, nip19 } from "nostr-tools";
 import { hexToBytes, bytesToHex } from "@noble/hashes/utils";
 import { useNotification } from "../../contexts/notification-context";
+import { useBackClose } from "../../hooks/useBackClose";
 
 interface Props {
   open: boolean;
@@ -33,6 +34,7 @@ export const CreateAccountModal: React.FC<Props> = ({ open, onClose }) => {
   const [privkey, setPrivkey] = useState("");
 
   const { setUser } = useUserContext();
+  useBackClose(open, onClose);
 
   const handleCreateAccount = async () => {
     try {

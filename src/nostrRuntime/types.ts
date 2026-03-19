@@ -27,6 +27,8 @@ export interface SubscribeOptions {
   onEose?: EoseCallback;
   /** If true, only query cache without creating network subscription */
   localOnly?: boolean;
+  /** If true, skip cache replay and dedup — always create a fresh network subscription */
+  fresh?: boolean;
 }
 
 /**

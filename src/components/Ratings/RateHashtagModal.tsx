@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Box, Button, Modal, TextField, Typography } from "@mui/material";
 import HashtagCard from "../Topics/HashtagCard";
+import { useBackClose } from "../../hooks/useBackClose";
 
 interface RateHashtagModalProps {
   open: boolean;
@@ -13,6 +14,7 @@ const RateHashtagModal: React.FC<RateHashtagModalProps> = ({
 }) => {
   const [hashtagInput, setHashtagInput] = useState("");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  useBackClose(open, onClose);
 
   const handleSubmit = () => {
     if (!hashtagInput.trim()) return;

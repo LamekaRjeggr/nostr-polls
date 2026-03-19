@@ -15,6 +15,7 @@ import { useRelays } from "../../../hooks/useRelays";
 import { Event } from "nostr-tools";
 import TopicsCard from "./TopicsCard";
 import { pool } from "../../../singletons";
+import { useBackClose } from "../../../hooks/useBackClose";
 
 interface Props {
   open: boolean;
@@ -28,6 +29,7 @@ const TopicMetadataModal: React.FC<Props> = ({ open, onClose, topic }) => {
   const [tab, setTab] = useState(0);
   const [previewEvent, setPreviewEvent] = useState<Event>();
   const { relays } = useRelays();
+  useBackClose(open, onClose);
 
   useEffect(() => {
     if (open) {
