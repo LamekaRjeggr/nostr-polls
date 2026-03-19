@@ -12,7 +12,7 @@ const isRootNote = (event: { tags: string[][] }) =>
 
 const FollowingFeed = ({ noteMode }: { noteMode: NoteMode }) => {
   const { user, requestLogin } = useUserContext();
-  const { notes, reposts, fetchNotes, refreshNotes, loadingMore, pendingCount, mergeNewNotes } =
+  const { notes, reposts, fetchNotes, refreshNotes, loadingMore, refreshing, pendingCount, mergeNewNotes } =
     useFollowingNotes();
   const { requestReportCheck, requestUserReportCheck } = useReports();
 
@@ -80,6 +80,7 @@ const FollowingFeed = ({ noteMode }: { noteMode: NoteMode }) => {
         followOutput={false}
         onEndReached={fetchNotes}
         onRefresh={refreshNotes}
+        refreshing={refreshing}
         computeItemKey={(_, item) => item.note.id}
         newItemCount={pendingCount}
         onShowNewItems={mergeNewNotes}

@@ -10,6 +10,7 @@ export const useDiscoverNotes = () => {
     const [version, setVersion] = useState(0);
     const [pendingCount, setPendingCount] = useState(0);
     const [loadingMore, setLoadingMore] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
     const [initialLoadComplete, setInitialLoadComplete] = useState(false);
     const subscriptionHandleRef = useRef<any>(null);
     const fetchedRef = useRef(false);
@@ -65,7 +66,7 @@ export const useDiscoverNotes = () => {
             subscriptionHandleRef.current.unsubscribe();
         }
 
-        setLoadingMore(true);
+        if (fresh) setRefreshing(true); else setLoadingMore(true);
 
         const filter: Filter = {
             kinds: [1],
@@ -81,6 +82,7 @@ export const useDiscoverNotes = () => {
             onEose: () => {
                 if (hasNewEvents) setVersion((v) => v + 1);
                 setLoadingMore(false);
+                setRefreshing(false);
                 setInitialLoadComplete(true);
                 handle.unsubscribe();
             },
@@ -115,6 +117,7 @@ export const useDiscoverNotes = () => {
         notes: notes(),
         pendingCount,
         loadingMore,
+        refreshing,
         fetchNotes,
         refreshNotes,
         mergeNewNotes,

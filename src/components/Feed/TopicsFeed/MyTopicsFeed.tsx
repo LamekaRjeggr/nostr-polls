@@ -37,6 +37,8 @@ const MyTopicsFeed = ({ onNavigateToDiscover, onSearchClick }: MyTopicsFeedProps
     publishModeration,
     publishUnmoderation,
     loading,
+    refreshing,
+    refreshNotes,
     moderatorsByTopic,
     selectedModsByTopic,
     setSelectedModeratorsForTopic,
@@ -127,6 +129,8 @@ const MyTopicsFeed = ({ onNavigateToDiscover, onSearchClick }: MyTopicsFeedProps
         newItemCount={pendingCount}
         onShowNewItems={mergeNewNotes}
         newItemLabel="notes"
+        onRefresh={refreshNotes}
+        refreshing={refreshing}
         headerContent={
           <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", px: 1, py: 0.5 }}>
             {hasModerators ? (

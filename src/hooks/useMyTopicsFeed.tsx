@@ -34,6 +34,7 @@ export function useMyTopicsFeed(myTopics: Set<string>) {
   const [feedMode, setFeedMode] = useState<FeedMode>("global");
   const [showAnyway, setShowAnyway] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [moderationVersion, setModerationVersion] = useState(0);
   const [selectedModsByTopic, setSelectedModsByTopic] = useState<
     Map<string, string[]>
@@ -199,15 +200,22 @@ export function useMyTopicsFeed(myTopics: Set<string>) {
 
   /* ------------------ subscriptions ------------------ */
 
-  useEffect(() => {
+  const subRef = useRef<ReturnType<typeof nostrRuntime.subscribe> | null>(null);
+
+  const startSubscription = useCallback((fresh?: boolean) => {
     if (!relays.length || myTopics.size === 0) {
       setLoading(false);
       return;
     }
 
+    if (subRef.current) {
+      subRef.current.unsubscribe();
+      subRef.current = null;
+    }
+
     const topics = Array.from(myTopics);
 
-    initialLoadDoneRef.current = false;
+    if (!fresh) initialLoadDoneRef.current = false;
 
     const sub = nostrRuntime.subscribe(
       relays,
@@ -217,7 +225,14 @@ export function useMyTopicsFeed(myTopics: Set<string>) {
         { kinds: [5], "#k": [String(OFFTOPIC_KIND)], limit: 500 },
       ],
       {
-        onEose: () => { initialLoadDoneRef.current = true; },
+        onEose: () => {
+          initialLoadDoneRef.current = true;
+          if (fresh) {
+            setRefreshing(false);
+          } else {
+            setLoading(false);
+          }
+        },
         onEvent: (event) => {
           /* ---- deletion events ---- */
           if (event.kind === 5) {
@@ -252,12 +267,19 @@ export function useMyTopicsFeed(myTopics: Set<string>) {
                 return next;
               });
             }
-            setLoading(false);
+            if (!fresh) setLoading(false);
           }
         },
+        fresh,
       }
     );
-    const timeout = setTimeout(() => setLoading(false), 10000);
+
+    subRef.current = sub;
+
+    const timeout = setTimeout(() => {
+      if (fresh) setRefreshing(false);
+      else setLoading(false);
+    }, 10000);
 
     return () => {
       sub.unsubscribe();
@@ -265,6 +287,20 @@ export function useMyTopicsFeed(myTopics: Set<string>) {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [relays, myTopics]);
+
+  useEffect(() => {
+    const cleanup = startSubscription();
+    return cleanup;
+  }, [startSubscription]);
+
+  const refreshNotes = useCallback(() => {
+    setPendingCount(0);
+    pendingNotesRef.current.clear();
+    setRefreshing(true);
+    // Temporarily treat incoming events as direct (not pending) during refresh
+    initialLoadDoneRef.current = false;
+    startSubscription(true);
+  }, [startSubscription]);
 
   /* ------------------ moderation resolution ------------------ */
 
@@ -529,6 +565,8 @@ export function useMyTopicsFeed(myTopics: Set<string>) {
     publishModeration,
     publishUnmoderation,
     loading,
+    refreshing,
+    refreshNotes,
     moderatorsByTopic,
     selectedModsByTopic,
     setSelectedModeratorsForTopic,

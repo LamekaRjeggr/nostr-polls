@@ -7,6 +7,7 @@ import { getRelaysForAuthors, prefetchOutboxRelays } from "../../../../nostr/Out
 
 export const useFollowingNotes = () => {
   const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [version, setVersion] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
   const missingNotesRef = useRef<Set<string>>(new Set());
@@ -97,7 +98,7 @@ export const useFollowingNotes = () => {
   // Load older notes (pagination down) or initial load
   const fetchNotes = useCallback(async (fresh?: boolean) => {
     if (!user?.follows?.length || loadingMore) return;
-    setLoadingMore(true);
+    if (fresh) setRefreshing(true); else setLoadingMore(true);
     const authors = Array.from(user.follows);
 
     prefetchOutboxRelays(authors); // fire-and-forget, populates cache for gossip model
@@ -139,6 +140,7 @@ export const useFollowingNotes = () => {
         if (hasNewEvents) setVersion((v) => v + 1);
         startMissingNotesFetcher();
         setLoadingMore(false);
+        setRefreshing(false);
         initialLoadDoneRef.current = true;
       },
       fresh,
@@ -159,6 +161,7 @@ export const useFollowingNotes = () => {
     fetchNotes,
     refreshNotes,
     loadingMore,
+    refreshing,
     pendingCount,
     mergeNewNotes,
   };

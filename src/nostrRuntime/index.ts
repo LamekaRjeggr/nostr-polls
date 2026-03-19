@@ -130,10 +130,38 @@ export class NostrRuntime {
       }
     }
 
-    // Create network subscription.
-    // When fresh=true, append a nonce to bypass deduplication so we always
-    // get a brand-new relay subscription instead of piggybacking on an
-    // existing one that may be on a stale/dead WebSocket.
+    // When fresh=true:
+    // 1. Force-close pool WebSocket connections for these relays AND remove
+    //    the relay objects from the pool's internal map. This forces
+    //    ensureRelay() to create brand-new relay objects with fresh TCP
+    //    connections. Without this, a silently-dead WebSocket (NAT timeout,
+    //    mobile background) still has _connected=true and a resolved
+    //    connectionPromise — pool.close() alone won't fix it because the
+    //    relay's ws.onclose handler skips cleanup when _connected is already
+    //    false (set by close()). nostr-tools then fires a fake EOSE via its
+    //    4.4s timeout, making it look like the refresh worked when zero
+    //    events were actually received.
+    // 2. Append a nonce to bypass subscription deduplication.
+    if (fresh) {
+      this.pool.close(relays);
+      // Remove stale relay objects so ensureRelay() creates new ones
+      const poolRelays = (this.pool as any).relays as Map<string, any>;
+      for (const url of relays) {
+        // normalizeURL is applied internally by pool.close, do it here too
+        try {
+          const normalized = new URL(url.indexOf('://') === -1 ? 'wss://' + url : url);
+          normalized.pathname = normalized.pathname.replace(/\/+/g, '/');
+          if (normalized.pathname.endsWith('/')) normalized.pathname = normalized.pathname.slice(0, -1);
+          if ((normalized.port === '80' && normalized.protocol === 'ws:') ||
+              (normalized.port === '443' && normalized.protocol === 'wss:')) normalized.port = '';
+          normalized.hash = '';
+          poolRelays.delete(normalized.toString());
+        } catch {
+          poolRelays.delete(url);
+        }
+      }
+    }
+
     const { id, unsubscribe } = this.subscriptionManager.subscribe(
       relays,
       filters,

@@ -82,6 +82,7 @@ export const PollFeed = () => {
   >();
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadingInitial, setLoadingInitial] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [pendingPollEvents, setPendingPollEvents] = useState<Event[]>([]);
   // Ref so handleIncomingEvent can read the current value without a stale closure
   const loadingInitialRef = useRef(true);
@@ -244,7 +245,12 @@ export const PollFeed = () => {
     }
 
     const closer = subscribeWithAuthors([filterPolls, filterResposts], () => {
-      setLoadingInitial(false);
+      if (fresh) {
+        setRefreshing(false);
+        loadingInitialRef.current = false;
+      } else {
+        setLoadingInitial(false);
+      }
     }, gossipRelays, fresh);
 
     return closer;
@@ -252,12 +258,12 @@ export const PollFeed = () => {
 
   const refreshFeed = useCallback(() => {
     if (feedSubscription) feedSubscription.unsubscribe();
-    setPollEvents([]);
-    setRepostEvents([]);
+    // Don't clear existing events — keep showing old data while refreshing.
+    // New events will merge in as they arrive from the network.
     setPendingPollEvents([]);
-    setLoadingInitial(true);
+    setRefreshing(true);
+    // Temporarily treat incoming events as direct (not pending) during refresh
     loadingInitialRef.current = true;
-    // fresh=true: skip cache replay, bypass dedup, always create new network subscription
     const closer = fetchInitialPolls(true);
     setFeedSubscription(closer);
   }, [feedSubscription, fetchInitialPolls]);
@@ -404,6 +410,7 @@ export const PollFeed = () => {
           data={combinedEvents}
           loading={loadingInitial}
           loadingMore={loadingMore}
+          refreshing={refreshing}
           onEndReached={loadMore}
           onRefresh={refreshFeed}
           computeItemKey={(_, event) => event.id}

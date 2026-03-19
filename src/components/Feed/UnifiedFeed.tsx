@@ -1,5 +1,5 @@
 import React, { useRef } from "react";
-import { Box, CircularProgress, Fab } from "@mui/material";
+import { Box, CircularProgress, Fab, LinearProgress } from "@mui/material";
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
 import { useNotification } from "../../contexts/notification-context";
 import useTopicExplorerScroll from "../../hooks/useTopicExplorerScroll";
@@ -34,6 +34,8 @@ interface UnifiedFeedProps<T> {
 
   // Pull-to-refresh (immersive mode only)
   onRefresh?: () => Promise<void> | void;
+  /** Show a subtle refreshing indicator (e.g. thin progress bar at top) */
+  refreshing?: boolean;
 
   // Content above Virtuoso inside the scroll container
   headerContent?: React.ReactNode;
@@ -58,6 +60,7 @@ function UnifiedFeed<T>({
   onShowNewItems,
   newItemLabel = "posts",
   onRefresh,
+  refreshing,
   headerContent,
   followOutput,
   virtuosoRef: externalVirtuosoRef,
@@ -132,6 +135,18 @@ function UnifiedFeed<T>({
   const feedContent = (
     <>
       <div ref={containerRef} style={{ height: "100%" }}>
+        {refreshing && (
+          <LinearProgress
+            sx={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              zIndex: 10,
+              height: 2,
+            }}
+          />
+        )}
         {headerContent}
         {showLoading ? (
           <Box
