@@ -34,8 +34,9 @@ import { signEvent } from "../../nostr";
 import { useRelays } from "../../hooks/useRelays";
 import { PollPreview } from "./PollPreview";
 import { Event, nip19 } from "nostr-tools";
-import { publishWithGossip, PublishResult } from "../../utils/publish";
+import { publishWithGossip } from "../../utils/publish";
 import { PublishDiagnosticModal } from "../Common/PublishDiagnosticModal";
+import { usePublishDiagnostic } from "../../hooks/usePublishDiagnostic";
 import { extractHashtags } from "../../utils/common";
 
 const generateOptionId = (): string => {
@@ -66,7 +67,9 @@ const PollTemplateForm: React.FC<{
   setEventContent: (val: string) => void;
   quotedEvent?: Event;
   onPublished?: () => void;
-}> = ({ eventContent, setEventContent, quotedEvent, onPublished }) => {
+  /** When provided, the parent handles the diagnostic modal instead of this form */
+  onPublishResult?: (event: Event, result: import("../../utils/publish").PublishResult) => void;
+}> = ({ eventContent, setEventContent, quotedEvent, onPublished, onPublishResult }) => {
   const [showPreview, setShowPreview] = useState(false);
   const [options, setOptions] = useState<Option[]>([
     [generateOptionId(), ""],
@@ -78,8 +81,7 @@ const PollTemplateForm: React.FC<{
   const [poW, setPoW] = useState<number | null>(null);
   const [expiration, setExpiration] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
-  const [diagnosticOpen, setDiagnosticOpen] = useState(false);
+  const { result: publishResult, open: diagnosticOpen, setOpen: setDiagnosticOpen, title: diagnosticTitle, openModal, retry } = usePublishDiagnostic();
   const [topics, setTopics] = useState<string[]>([]);
 
   const { showNotification } = useNotification();
@@ -158,15 +160,15 @@ const PollTemplateForm: React.FC<{
         showNotification(NOTIFICATION_MESSAGES.POLL_SIGN_FAILED, "error");
         return;
       }
-
       const result = await publishWithGossip(writeRelays, signedEvent);
       setIsSubmitting(false);
-      setPublishResult(result);
-      setDiagnosticOpen(true);
+      if (onPublishResult) {
+        onPublishResult(signedEvent, result);
+      } else {
+        openModal(signedEvent, result, "Poll publish results");
+      }
       if (!result.ok) {
         showNotification(NOTIFICATION_MESSAGES.POLL_PUBLISH_NO_RELAY, "error");
-      } else if (onPublished) {
-        onPublished();
       }
     } catch (error) {
       setIsSubmitting(false);
@@ -343,10 +345,14 @@ const PollTemplateForm: React.FC<{
           open={diagnosticOpen}
           onClose={() => {
             setDiagnosticOpen(false);
-            if (publishResult.ok && !onPublished) navigate("/feeds/polls");
+            if (publishResult.ok) {
+              if (onPublished) onPublished();
+              else navigate("/feeds/polls");
+            }
           }}
-          title="Poll publish results"
+          title={diagnosticTitle}
           entries={publishResult.relayResults}
+          onRetry={retry}
         />
       )}
     </form>

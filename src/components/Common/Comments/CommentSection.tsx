@@ -30,7 +30,8 @@ import { useNotification } from "../../../contexts/notification-context";
 import { NOTIFICATION_MESSAGES } from "../../../constants/notifications";
 import { nostrRuntime } from "../../../singletons";
 import { SubscriptionHandle } from "../../../nostrRuntime/types";
-import { publishWithGossip, PublishResult } from "../../../utils/publish";
+import { publishWithGossip } from "../../../utils/publish";
+import { usePublishDiagnostic } from "../../../hooks/usePublishDiagnostic";
 import { PublishDiagnosticModal } from "../PublishDiagnosticModal";
 import { FeedbackMenu } from "../../FeedbackMenu";
 import { RelaySourceModal } from "../RelaySourceModal";
@@ -168,8 +169,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   const [showReplies, setShowReplies] = useState<Map<string, boolean>>(
     new Map()
   );
-  const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
-  const [diagnosticOpen, setDiagnosticOpen] = useState(false);
+  const { result: publishResult, open: diagnosticOpen, setOpen: setDiagnosticOpen, title: diagnosticTitle, openModal, retry } = usePublishDiagnostic();
 
   const { user } = useUserContext();
   const { relays, writeRelays } = useRelays();
@@ -224,8 +224,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
     if (!signedComment) return;
 
     const result = await publishWithGossip(writeRelays, signedComment);
-    setPublishResult(result);
-    setDiagnosticOpen(true);
+    openModal(signedComment, result, "Comment publish results");
 
     if (result.ok) {
       showNotification("Comment published!", "success");
@@ -336,8 +335,9 @@ const CommentSection: React.FC<CommentSectionProps> = ({
         <PublishDiagnosticModal
           open={diagnosticOpen}
           onClose={() => setDiagnosticOpen(false)}
-          title="Comment publish results"
+          title={diagnosticTitle}
           entries={publishResult.relayResults}
+          onRetry={retry}
         />
       )}
     </div>

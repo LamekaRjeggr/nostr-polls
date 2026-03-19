@@ -56,6 +56,7 @@ import { RelaySourceModal } from "../Common/RelaySourceModal";
 import { PublishDiagnosticModal } from "../Common/PublishDiagnosticModal";
 import { useEventRelays } from "../../hooks/useEventRelays";
 import { PublishResult } from "../../utils/publish";
+import { usePublishDiagnostic } from "../../hooks/usePublishDiagnostic";
 import PollOptions from "./PollOptions";
 import { usePollResults } from "../../hooks/usePollResults";
 import { useBackClose } from "../../hooks/useBackClose";
@@ -87,9 +88,9 @@ const PollResponseForm: React.FC<PollResponseFormProps> = ({
   const [isDetailsOpen, setIsDetailsOpen] = useState<boolean>(false);
   const [relayModalOpen, setRelayModalOpen] = useState(false);
   const [isBroadcasting, setIsBroadcasting] = useState(false);
-  const [broadcastResult, setBroadcastResult] = useState<PublishResult | null>(null);
-  const [diagnosticOpen, setDiagnosticOpen] = useState(false);
-  const [diagnosticResult, setDiagnosticResult] = useState<PublishResult | null>(null);
+  // Compact summary just for the inline "Broadcasted X/Y" label in the menu
+  const [broadcastSummary, setBroadcastSummary] = useState<{ accepted: number; total: number } | null>(null);
+  const { result: diagnosticResult, open: diagnosticOpen, setOpen: setDiagnosticOpen, title: diagnosticTitle, openModal: openDiagnostic, retry } = usePublishDiagnostic();
   const [error, setError] = useState<string>("");
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
   const [filterPubkeys, setFilterPubkeys] = useState<string[]>([]);
@@ -157,19 +158,15 @@ const PollResponseForm: React.FC<PollResponseFormProps> = ({
   const handleBroadcast = async () => {
     if (isBroadcasting) return;
     setIsBroadcasting(true);
-    setBroadcastResult(null);
+    setBroadcastSummary(null);
     try {
       const res = await waitForPublish(writeRelays, pollEvent);
-      setBroadcastResult(res);
-      if (!res.ok || res.accepted < res.total) {
-        setDiagnosticResult(res);
-        setDiagnosticOpen(true);
-      }
+      setBroadcastSummary({ accepted: res.accepted, total: res.total });
+      openDiagnostic(pollEvent, res, "Broadcast relay results");
     } catch {
       const res: PublishResult = { ok: false, accepted: 0, total: relays.length, relayResults: [] };
-      setBroadcastResult(res);
-      setDiagnosticResult(res);
-      setDiagnosticOpen(true);
+      setBroadcastSummary({ accepted: 0, total: relays.length });
+      openDiagnostic(pollEvent, res, "Broadcast relay results");
     } finally {
       setIsBroadcasting(false);
     }
@@ -261,15 +258,14 @@ const PollResponseForm: React.FC<PollResponseFormProps> = ({
     const eventRelays = pollEvent.tags.filter((t) => t[0] === "relay").map((t) => t[1]);
     const publishRelays = eventRelays.length ? eventRelays : relays;
     const result = await waitForPublish(publishRelays, signedResponse!);
+    openDiagnostic(signedResponse!, result, "Vote publish results");
     if (result.ok) {
       showNotification(`Vote submitted to ${result.accepted}/${result.total} relays`, "success");
       if (result.accepted < result.total) {
-        setDiagnosticResult(result);
         setDiagnosticOpen(true);
       }
     } else {
       showNotification("No relays accepted your vote", "error");
-      setDiagnosticResult(result);
       setDiagnosticOpen(true);
     }
     setHasSubmitted(true);
@@ -431,17 +427,17 @@ const PollResponseForm: React.FC<PollResponseFormProps> = ({
                 ) : (
                   <CellTowerIcon
                     fontSize="small"
-                    sx={broadcastResult ? { color: broadcastResult.accepted > 0 ? "success.main" : "error.main" } : {}}
+                    sx={broadcastSummary ? { color: broadcastSummary.accepted > 0 ? "success.main" : "error.main" } : {}}
                   />
                 )}
                 {isBroadcasting
                   ? "Broadcasting…"
-                  : broadcastResult
-                  ? `Broadcasted: ${broadcastResult.accepted} / ${broadcastResult.total} relays`
+                  : broadcastSummary
+                  ? `Broadcasted: ${broadcastSummary.accepted} / ${broadcastSummary.total} relays`
                   : "Broadcast"}
               </MenuItem>
-              {broadcastResult && (
-                <MenuItem onClick={() => { setDiagnosticResult(broadcastResult); setDiagnosticOpen(true); }} sx={{ gap: 1, fontSize: "0.8rem", color: "text.secondary" }}>
+              {broadcastSummary && (
+                <MenuItem onClick={() => { setDiagnosticOpen(true); setAnchorEl(null); }} sx={{ gap: 1, fontSize: "0.8rem", color: "text.secondary" }}>
                   View relay details
                 </MenuItem>
               )}
@@ -585,8 +581,9 @@ const PollResponseForm: React.FC<PollResponseFormProps> = ({
           <PublishDiagnosticModal
             open={diagnosticOpen}
             onClose={() => setDiagnosticOpen(false)}
-            title="Vote publish results"
+            title={diagnosticTitle}
             entries={diagnosticResult.relayResults}
+            onRetry={retry}
           />
         )}
         <RelaySourceModal

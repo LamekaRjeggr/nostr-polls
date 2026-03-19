@@ -61,19 +61,28 @@ export async function waitForPublish(
   const total = relays.length;
   if (total === 0) return { ok: false, accepted: 0, total: 0, relayResults: [] };
 
+  // Evict any relay objects with a dead WebSocket before attempting publish.
+  // Subscriptions call relay.close() when they end, which closes the socket but
+  // leaves the stale relay object in pool.relays — ensureRelay() would reuse it
+  // and the send() would fail immediately with a WebSocket error.
+  nostrRuntime.cleanStaleRelays(relays);
+
   const globalStart = Date.now();
   let relayResults = await attemptPublish(relays, event, globalStart);
 
-  // If every relay failed with a websocket error (dead connections, not relay
-  // rejections), trigger a reconnect and retry once. This handles the case
-  // where the OS killed WebSocket connections while the app was backgrounded.
-  const allWebsocketErrors = relayResults.every(
-    (r) => r.status === "rejected" && r.message?.toLowerCase().includes("websocket")
-  );
-  if (allWebsocketErrors) {
-    nostrRuntime.reconnect();
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    relayResults = await attemptPublish(relays, event, globalStart);
+  // Auto-retry any relay that failed with a WebSocket error (dead connection —
+  // NAT timeout, mobile background, etc.). We force-reset those specific relays
+  // in the pool so ensureRelay() creates a fresh WebSocket rather than reusing
+  // the stale one. We retry only the affected relays, not the whole set.
+  const wsErrorRelays = relayResults
+    .filter((r) => r.status === "rejected" && r.message?.toLowerCase().includes("websocket"))
+    .map((r) => r.relay);
+
+  if (wsErrorRelays.length > 0) {
+    nostrRuntime.forceResetRelays(wsErrorRelays);
+    const retried = await attemptPublish(wsErrorRelays, event, Date.now());
+    const retryMap = new Map(retried.map((r) => [r.relay, r]));
+    relayResults = relayResults.map((r) => retryMap.get(r.relay) ?? r);
   }
 
   const accepted = relayResults.filter((r) => r.status === "accepted").length;

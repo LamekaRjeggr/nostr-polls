@@ -35,6 +35,7 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import SummarizeIcon from "@mui/icons-material/Summarize";
 import CellTowerIcon from "@mui/icons-material/CellTower";
 import { waitForPublish } from "../../utils/publish";
+import { usePublishDiagnostic } from "../../hooks/usePublishDiagnostic";
 import RateEventModal from "../../components/Ratings/RateEventModal";
 import { useUserContext } from "../../hooks/useUserContext";
 import { useListContext } from "../../hooks/useListContext";
@@ -52,7 +53,6 @@ import { Nip05Badge } from "../Common/Nip05Badge";
 import { RelaySourceModal } from "../Common/RelaySourceModal";
 import { PublishDiagnosticModal } from "../Common/PublishDiagnosticModal";
 import { useEventRelays } from "../../hooks/useEventRelays";
-import { PublishResult } from "../../utils/publish";
 
 interface NotesProps {
   event: Event;
@@ -105,20 +105,16 @@ export const Notes: React.FC<NotesProps> = ({
 
   // Broadcast state
   const [isBroadcasting, setIsBroadcasting] = useState(false);
-  const [broadcastResult, setBroadcastResult] = useState<PublishResult | null>(null);
-  const [diagnosticOpen, setDiagnosticOpen] = useState(false);
+  const { result: broadcastResult, open: diagnosticOpen, setOpen: setDiagnosticOpen, title: diagnosticTitle, openModal: openDiagnostic, retry } = usePublishDiagnostic();
 
   const handleBroadcast = async () => {
     if (isBroadcasting) return;
     setIsBroadcasting(true);
-    setBroadcastResult(null);
     try {
       const res = await waitForPublish(writeRelays, event);
-      setBroadcastResult(res);
-      if (!res.ok || res.accepted < res.total) setDiagnosticOpen(true);
+      openDiagnostic(event, res, "Broadcast relay results");
     } catch {
-      setBroadcastResult({ ok: false, accepted: 0, total: relays.length, relayResults: [] });
-      setDiagnosticOpen(true);
+      openDiagnostic(event, { ok: false, accepted: 0, total: relays.length, relayResults: [] }, "Broadcast relay results");
     } finally {
       setIsBroadcasting(false);
     }
@@ -671,8 +667,9 @@ export const Notes: React.FC<NotesProps> = ({
         <PublishDiagnosticModal
           open={diagnosticOpen}
           onClose={() => setDiagnosticOpen(false)}
-          title="Broadcast relay results"
+          title={diagnosticTitle}
           entries={broadcastResult.relayResults}
+          onRetry={retry}
         />
       )}
       <RelaySourceModal

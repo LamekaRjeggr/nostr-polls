@@ -386,7 +386,15 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             message: sendStatus.reasons[relay],
             latencyMs: sendStatus.latencies[relay],
           }))}
-          onRetry={onRetry ? () => onRetry() : undefined}
+          onRetry={onRetry ? async (_relay?: string) => {
+            onRetry();
+            return Object.entries(sendStatus.relays).map(([relay, status]) => ({
+              relay,
+              status,
+              message: sendStatus.reasons[relay],
+              latencyMs: sendStatus.latencies[relay],
+            }));
+          } : undefined}
         />
       )}
     </Box>

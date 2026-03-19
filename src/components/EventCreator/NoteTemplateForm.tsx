@@ -24,8 +24,9 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
 import { NotePreview } from "./NotePreview";
-import { publishWithGossip, PublishResult } from "../../utils/publish";
+import { publishWithGossip } from "../../utils/publish";
 import { PublishDiagnosticModal } from "../Common/PublishDiagnosticModal";
+import { usePublishDiagnostic } from "../../hooks/usePublishDiagnostic";
 import MentionTextArea, { extractMentionTags } from "./MentionTextArea";
 import { PostEnhancementDialog } from "./PostEnhancementDialog";
 import { aiService } from "../../services/ai-service";
@@ -40,10 +41,11 @@ const NoteTemplateForm: React.FC<{
   setEventContent: (val: string) => void;
   quotedEvent?: Event;
   onPublished?: () => void;
-}> = ({ eventContent, setEventContent, quotedEvent, onPublished }) => {
+  /** When provided, the parent handles the diagnostic modal instead of this form */
+  onPublishResult?: (event: Event, result: import("../../utils/publish").PublishResult) => void;
+}> = ({ eventContent, setEventContent, quotedEvent, onPublished, onPublishResult }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
-  const [diagnosticOpen, setDiagnosticOpen] = useState(false);
+  const { result: publishResult, open: diagnosticOpen, setOpen: setDiagnosticOpen, title: diagnosticTitle, openModal, retry } = usePublishDiagnostic();
   const [showPreview, setShowPreview] = useState(false);
   const [topics, setTopics] = useState<string[]>([]);
   const [isEnhancing, setIsEnhancing] = useState(false);
@@ -166,12 +168,13 @@ const NoteTemplateForm: React.FC<{
       }
       const result = await publishWithGossip(writeRelays, signedEvent);
       setIsSubmitting(false);
-      setPublishResult(result);
-      setDiagnosticOpen(true);
+      if (onPublishResult) {
+        onPublishResult(signedEvent, result);
+      } else {
+        openModal(signedEvent, result, "Note publish results");
+      }
       if (!result.ok) {
         showNotification(NOTIFICATION_MESSAGES.NOTE_PUBLISH_NO_RELAY, "error");
-      } else if (onPublished) {
-        onPublished();
       }
     } catch (error) {
       setIsSubmitting(false);
@@ -388,10 +391,14 @@ const NoteTemplateForm: React.FC<{
           open={diagnosticOpen}
           onClose={() => {
             setDiagnosticOpen(false);
-            if (publishResult.ok && !onPublished) navigate("/feeds/notes");
+            if (publishResult.ok) {
+              if (onPublished) onPublished();
+              else navigate("/feeds/notes");
+            }
           }}
-          title="Note publish results"
+          title={diagnosticTitle}
           entries={publishResult.relayResults}
+          onRetry={retry}
         />
       )}
     </form>

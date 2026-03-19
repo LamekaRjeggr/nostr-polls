@@ -17,6 +17,8 @@ import PollResponseForm from "../../PollResponse/PollResponseForm";
 import NoteTemplateForm from "../../EventCreator/NoteTemplateForm";
 import PollTemplateForm from "../../EventCreator/PollTemplateForm";
 import { useBackClose } from "../../../hooks/useBackClose";
+import { usePublishDiagnostic } from "../../../hooks/usePublishDiagnostic";
+import { PublishDiagnosticModal } from "../PublishDiagnosticModal";
 
 interface QuotePostDialogProps {
   open: boolean;
@@ -29,6 +31,7 @@ const QuotePostDialog: React.FC<QuotePostDialogProps> = ({ open, onClose, event 
   const [content, setContent] = useState("");
   const { relays } = useRelays();
   useBackClose(open, onClose);
+  const { result: publishResult, open: diagOpen, setOpen: setDiagOpen, title: diagTitle, openModal, retry } = usePublishDiagnostic();
 
   const neventId = useMemo(() => {
     if (!event.id || event.id.length !== 64 || !/^[0-9a-f]+$/i.test(event.id)) return null;
@@ -44,6 +47,19 @@ const QuotePostDialog: React.FC<QuotePostDialogProps> = ({ open, onClose, event 
   };
 
   return (
+    <>
+    {publishResult && (
+      <PublishDiagnosticModal
+        open={diagOpen}
+        onClose={() => {
+          setDiagOpen(false);
+          if (publishResult.ok) handleClose();
+        }}
+        title={diagTitle}
+        entries={publishResult.relayResults}
+        onRetry={retry}
+      />
+    )}
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>
         Quote {event.kind === NOSTR_EVENT_KINDS.POLL ? "Poll" : "Post"}
@@ -99,14 +115,14 @@ const QuotePostDialog: React.FC<QuotePostDialogProps> = ({ open, onClose, event 
             eventContent={content}
             setEventContent={setContent}
             quotedEvent={event}
-            onPublished={handleClose}
+            onPublishResult={(ev, result) => openModal(ev, result, "Quote publish results")}
           />
         ) : (
           <PollTemplateForm
             eventContent={content}
             setEventContent={setContent}
             quotedEvent={event}
-            onPublished={handleClose}
+            onPublishResult={(ev, result) => openModal(ev, result, "Quote publish results")}
           />
         )}
       </DialogContent>
@@ -114,6 +130,7 @@ const QuotePostDialog: React.FC<QuotePostDialogProps> = ({ open, onClose, event 
         <Button onClick={handleClose}>Cancel</Button>
       </DialogActions>
     </Dialog>
+    </>
   );
 };
 

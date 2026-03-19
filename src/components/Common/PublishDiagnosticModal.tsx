@@ -1,22 +1,27 @@
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Button,
   Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import TimerOffIcon from "@mui/icons-material/TimerOff";
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
+import ReplayIcon from "@mui/icons-material/Replay";
 import { useBackClose } from "../../hooks/useBackClose";
 
 export type DiagnosticRelayStatus = "accepted" | "sent" | "rejected" | "failed" | "timeout" | "pending";
@@ -33,7 +38,8 @@ interface PublishDiagnosticModalProps {
   onClose: () => void;
   title?: string;
   entries: DiagnosticEntry[];
-  onRetry?: () => void;
+  /** Called with a relay URL to retry just that relay, or undefined to retry all failed. */
+  onRetry?: (relay?: string) => Promise<DiagnosticEntry[]>;
 }
 
 function hostname(url: string): string {
@@ -96,9 +102,40 @@ export const PublishDiagnosticModal: React.FC<PublishDiagnosticModalProps> = ({
   onRetry,
 }) => {
   useBackClose(open, onClose);
-  const accepted = entries.filter((e) => e.status === "accepted" || e.status === "sent").length;
-  const failed = entries.filter((e) => e.status === "rejected" || e.status === "failed").length;
-  const timedOut = entries.filter((e) => e.status === "timeout").length;
+  const [currentEntries, setCurrentEntries] = useState<DiagnosticEntry[]>(entries);
+  // Set of relay URLs currently being retried
+  const [retryingRelays, setRetryingRelays] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setCurrentEntries(entries);
+  }, [entries]);
+
+  const isRetrying = retryingRelays.size > 0;
+
+  const handleRetry = async (relay?: string) => {
+    if (!onRetry) return;
+    const targets = relay
+      ? [relay]
+      : currentEntries.filter((e) => e.status !== "accepted" && e.status !== "sent").map((e) => e.relay);
+    if (targets.length === 0) return;
+
+    setRetryingRelays((prev) => new Set(Array.from(prev).concat(targets)));
+    try {
+      const updated = await onRetry(relay);
+      setCurrentEntries(updated);
+    } finally {
+      setRetryingRelays((prev) => {
+        const next = new Set(prev);
+        targets.forEach((r) => next.delete(r));
+        return next;
+      });
+    }
+  };
+
+  const accepted = currentEntries.filter((e) => e.status === "accepted" || e.status === "sent").length;
+  const failed = currentEntries.filter((e) => e.status === "rejected" || e.status === "failed").length;
+  const timedOut = currentEntries.filter((e) => e.status === "timeout").length;
+  const retryable = currentEntries.filter((e) => e.status !== "accepted" && e.status !== "sent").length;
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -120,25 +157,51 @@ export const PublishDiagnosticModal: React.FC<PublishDiagnosticModalProps> = ({
               <TableCell sx={{ fontWeight: 600, fontSize: "0.75rem", width: 110 }}>Status</TableCell>
               <TableCell sx={{ fontWeight: 600, fontSize: "0.75rem", width: 70 }}>Time</TableCell>
               <TableCell sx={{ fontWeight: 600, fontSize: "0.75rem" }}>Reason</TableCell>
+              {onRetry && <TableCell sx={{ width: 36 }} />}
             </TableRow>
           </TableHead>
           <TableBody>
-            {entries.map((e) => (
-              <TableRow key={e.relay}>
-                <TableCell sx={{ fontFamily: "monospace", fontSize: "0.75rem" }}>
-                  {hostname(e.relay)}
-                </TableCell>
-                <TableCell>
-                  <StatusChip status={e.status} />
-                </TableCell>
-                <TableCell sx={{ fontSize: "0.75rem", color: e.latencyMs !== undefined && e.latencyMs > 2000 ? "warning.main" : "text.secondary" }}>
-                  {e.latencyMs !== undefined ? (e.latencyMs < 1000 ? `${e.latencyMs}ms` : `${(e.latencyMs / 1000).toFixed(1)}s`) : "—"}
-                </TableCell>
-                <TableCell sx={{ fontSize: "0.75rem", color: "text.secondary" }}>
-                  {e.message || "no reason provided"}
-                </TableCell>
-              </TableRow>
-            ))}
+            {currentEntries.map((e) => {
+              const isFailed = e.status !== "accepted" && e.status !== "sent";
+              const isRowRetrying = retryingRelays.has(e.relay);
+              return (
+                <TableRow key={e.relay}>
+                  <TableCell sx={{ fontFamily: "monospace", fontSize: "0.75rem" }}>
+                    {hostname(e.relay)}
+                  </TableCell>
+                  <TableCell>
+                    {isRowRetrying ? (
+                      <CircularProgress size={16} />
+                    ) : (
+                      <StatusChip status={e.status} />
+                    )}
+                  </TableCell>
+                  <TableCell sx={{ fontSize: "0.75rem", color: e.latencyMs !== undefined && e.latencyMs > 2000 ? "warning.main" : "text.secondary" }}>
+                    {e.latencyMs !== undefined ? (e.latencyMs < 1000 ? `${e.latencyMs}ms` : `${(e.latencyMs / 1000).toFixed(1)}s`) : "—"}
+                  </TableCell>
+                  <TableCell sx={{ fontSize: "0.75rem", color: "text.secondary" }}>
+                    {e.message || "no reason provided"}
+                  </TableCell>
+                  {onRetry && (
+                    <TableCell sx={{ p: 0 }}>
+                      {isFailed && (
+                        <Tooltip title="Retry this relay">
+                          <span>
+                            <IconButton
+                              size="small"
+                              disabled={isRowRetrying || isRetrying}
+                              onClick={() => handleRetry(e.relay)}
+                            >
+                              {isRowRetrying ? <CircularProgress size={14} /> : <ReplayIcon sx={{ fontSize: 16 }} />}
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      )}
+                    </TableCell>
+                  )}
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
         {timedOut > 0 && (
@@ -153,12 +216,17 @@ export const PublishDiagnosticModal: React.FC<PublishDiagnosticModalProps> = ({
         )}
       </DialogContent>
       <DialogActions>
-        {onRetry && (
-          <Button onClick={() => { onRetry(); onClose(); }} color="primary">
-            Retry
+        {onRetry && retryable > 1 && (
+          <Button
+            onClick={() => handleRetry()}
+            color="primary"
+            disabled={isRetrying}
+            startIcon={isRetrying ? <CircularProgress size={16} /> : undefined}
+          >
+            {isRetrying ? "Retrying…" : `Retry all ${retryable} failed`}
           </Button>
         )}
-        <Button onClick={onClose}>Close</Button>
+        <Button onClick={onClose} disabled={isRetrying}>Close</Button>
       </DialogActions>
     </Dialog>
   );

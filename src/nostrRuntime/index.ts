@@ -144,21 +144,12 @@ export class NostrRuntime {
     // 2. Append a nonce to bypass subscription deduplication.
     if (fresh) {
       this.pool.close(relays);
-      // Remove stale relay objects so ensureRelay() creates new ones
-      const poolRelays = (this.pool as any).relays as Map<string, any>;
-      for (const url of relays) {
-        // normalizeURL is applied internally by pool.close, do it here too
-        try {
-          const normalized = new URL(url.indexOf('://') === -1 ? 'wss://' + url : url);
-          normalized.pathname = normalized.pathname.replace(/\/+/g, '/');
-          if (normalized.pathname.endsWith('/')) normalized.pathname = normalized.pathname.slice(0, -1);
-          if ((normalized.port === '80' && normalized.protocol === 'ws:') ||
-              (normalized.port === '443' && normalized.protocol === 'wss:')) normalized.port = '';
-          normalized.hash = '';
-          poolRelays.delete(normalized.toString());
-        } catch {
-          poolRelays.delete(url);
-        }
+      // Remove stale relay objects so ensureRelay() creates new ones.
+      // Match using the same normalizeURL logic nostr-tools uses internally.
+      const poolRelays = (this.pool as any).relays as Map<string, unknown>;
+      const normalizedTargets = new Set(relays.map(poolNormalizeUrl).filter(Boolean));
+      for (const key of Array.from(poolRelays.keys())) {
+        if (normalizedTargets.has(key)) poolRelays.delete(key);
       }
     }
 
@@ -389,6 +380,55 @@ export class NostrRuntime {
     this.subscriptionManager.reconnectAll();
   }
 
+  /**
+   * Force-close and remove specific relays from the pool so the next
+   * connection attempt (subscribe or publish) creates a fresh WebSocket.
+   *
+   * Use this when a relay fails with a WebSocket error — pool.close() alone
+   * is not enough because it leaves the stale relay object in pool.relays,
+   * and ensureRelay() will reuse it (with a resolved-but-dead connectionPromise).
+   */
+  forceResetRelays(relays: string[]): void {
+    this.pool.close(relays);
+    const poolRelays = (this.pool as any).relays as Map<string, unknown>;
+    const normalizedTargets = new Set(relays.map(poolNormalizeUrl).filter(Boolean));
+    for (const key of Array.from(poolRelays.keys())) {
+      if (normalizedTargets.has(key)) poolRelays.delete(key);
+    }
+  }
+
+  /**
+   * Proactively evict relay objects whose WebSocket is CLOSING or CLOSED.
+   *
+   * Call this before pool.publish() to prevent "websocket error" failures.
+   * The problem: when a subscription ends, nostr-tools calls relay.close(),
+   * which sets _connected=false and closes the WebSocket — but does NOT clear
+   * connectionPromise (the onclose handler skips cleanup because _connected is
+   * already false). So ensureRelay() returns the dead relay, thinking it's
+   * connected, and the next send() throws a WebSocket error.
+   *
+   * By deleting dead relays from the map first, ensureRelay() creates a fresh
+   * relay object with a new WebSocket.
+   */
+  cleanStaleRelays(relays: string[]): void {
+    const poolRelays = (this.pool as any).relays as Map<string, any>;
+    const stale: string[] = [];
+    for (const url of relays) {
+      const normalized = poolNormalizeUrl(url);
+      if (!normalized) continue;
+      const relay = poolRelays.get(normalized);
+      if (!relay) continue;
+      const ws = relay.ws;
+      // WebSocket.CLOSING = 2, WebSocket.CLOSED = 3
+      if (ws && (ws.readyState === 2 || ws.readyState === 3)) {
+        stale.push(url);
+      }
+    }
+    if (stale.length > 0) {
+      this.forceResetRelays(stale);
+    }
+  }
+
 
   /**
    * Cleanup - close all subscriptions and clear store
@@ -412,3 +452,19 @@ export function createNostrRuntime(pool: SimplePool): NostrRuntime {
 export * from './types';
 export { EventStore } from './EventStore';
 export { SubscriptionManager } from './SubscriptionManager';
+
+/** Replicates nostr-tools' internal normalizeURL so we can match pool.relays keys. */
+function poolNormalizeUrl(url: string): string | null {
+  try {
+    if (!url.includes('://')) url = 'wss://' + url;
+    const p = new URL(url);
+    p.pathname = p.pathname.replace(/\/+/g, '/');
+    if (p.pathname.endsWith('/')) p.pathname = p.pathname.slice(0, -1);
+    if ((p.port === '80' && p.protocol === 'ws:') || (p.port === '443' && p.protocol === 'wss:')) p.port = '';
+    p.searchParams.sort();
+    p.hash = '';
+    return p.toString();
+  } catch {
+    return null;
+  }
+}
