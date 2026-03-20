@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Box,
   Button,
@@ -11,7 +11,12 @@ import {
   MenuItem,
   Collapse,
   Chip,
+  CircularProgress,
+  IconButton,
+  Tooltip,
+  LinearProgress,
 } from "@mui/material";
+import AttachFileIcon from "@mui/icons-material/AttachFile";
 import MentionTextArea, { extractMentionTags } from "./MentionTextArea";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
@@ -38,6 +43,17 @@ import { publishWithGossip } from "../../utils/publish";
 import { PublishDiagnosticModal } from "../Common/PublishDiagnosticModal";
 import { usePublishDiagnostic } from "../../hooks/usePublishDiagnostic";
 import { extractHashtags } from "../../utils/common";
+import { uploadToBlossom, getBlossomServer } from "../../services/blossomService";
+
+const UPLOAD_PLACEHOLDER = "[uploading…]";
+
+const insertAtPosition = (text: string, insertion: string, pos: number): string => {
+  const before = text.slice(0, pos);
+  const after = text.slice(pos);
+  const prefix = before.length > 0 && !before.endsWith("\n") ? "\n" : "";
+  const suffix = after.length > 0 && !after.startsWith("\n") ? "\n" : "";
+  return `${before}${prefix}${insertion}${suffix}${after}`;
+};
 
 const generateOptionId = (): string => {
   return Math.random().toString(36).substr(2, 9);
@@ -81,6 +97,16 @@ const PollTemplateForm: React.FC<{
   const [poW, setPoW] = useState<number | null>(null);
   const [expiration, setExpiration] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [uploadingOptionIndex, setUploadingOptionIndex] = useState<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const optionFileInputRef = useRef<HTMLInputElement>(null);
+  const pendingOptionIndexRef = useRef<number | null>(null);
+  const eventContentRef = useRef(eventContent);
+  useEffect(() => { eventContentRef.current = eventContent; }, [eventContent]);
+  const optionsRef = useRef(options);
+  useEffect(() => { optionsRef.current = options; }, [options]);
   const { result: publishResult, open: diagnosticOpen, setOpen: setDiagnosticOpen, title: diagnosticTitle, openModal, retry } = usePublishDiagnostic();
   const [topics, setTopics] = useState<string[]>([]);
 
@@ -89,6 +115,56 @@ const PollTemplateForm: React.FC<{
   const { relays, writeRelays } = useRelays();
   const navigate = useNavigate();
   const now = dayjs();
+
+  const uploadQuestionFile = async (file: File, cursorPos?: number) => {
+    if (!user) { showNotification("Please log in to upload files", "warning"); return; }
+    const insertPos = cursorPos ?? eventContentRef.current.length;
+    setEventContent(insertAtPosition(eventContentRef.current, UPLOAD_PLACEHOLDER, insertPos));
+    setIsUploading(true);
+    try {
+      const url = await uploadToBlossom(file, getBlossomServer(), (template) => signEvent(template, user.privateKey));
+      setEventContent(eventContentRef.current.replace(UPLOAD_PLACEHOLDER, url));
+    } catch (err) {
+      setEventContent(eventContentRef.current.replace(UPLOAD_PLACEHOLDER, ""));
+      showNotification(err instanceof Error ? err.message : "Upload failed", "error");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const uploadOptionFile = async (file: File, optionIndex: number, cursorPos?: number) => {
+    if (!user) { showNotification("Please log in to upload files", "warning"); return; }
+    const currentOptions = [...optionsRef.current];
+    const currentLabel = currentOptions[optionIndex][1];
+    const insertPos = cursorPos ?? currentLabel.length;
+    currentOptions[optionIndex] = [currentOptions[optionIndex][0], insertAtPosition(currentLabel, UPLOAD_PLACEHOLDER, insertPos)];
+    setOptions(currentOptions);
+    setUploadingOptionIndex(optionIndex);
+    try {
+      const url = await uploadToBlossom(file, getBlossomServer(), (template) => signEvent(template, user.privateKey));
+      const latest = [...optionsRef.current];
+      latest[optionIndex] = [latest[optionIndex][0], latest[optionIndex][1].replace(UPLOAD_PLACEHOLDER, url)];
+      setOptions(latest);
+    } catch (err) {
+      const latest = [...optionsRef.current];
+      latest[optionIndex] = [latest[optionIndex][0], latest[optionIndex][1].replace(UPLOAD_PLACEHOLDER, "")];
+      setOptions(latest);
+      showNotification(err instanceof Error ? err.message : "Upload failed", "error");
+    } finally {
+      setUploadingOptionIndex(null);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(true); };
+  const handleDragLeave = () => setIsDragOver(false);
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = Array.from(e.dataTransfer.files).find(
+      (f) => f.type.startsWith("image/") || f.type.startsWith("video/")
+    );
+    if (file) uploadQuestionFile(file);
+  };
 
   const addOption = () => {
     setOptions([...options, [generateOptionId(), ""]]);
@@ -201,12 +277,90 @@ const PollTemplateForm: React.FC<{
     <form onSubmit={handleSubmit}>
       <Stack spacing={4}>
         <Box>
-          <MentionTextArea
-            label="Poll Question"
-            value={eventContent}
-            onChange={setEventContent}
-            required
-            placeholder="Ask a question. Use @mentions and #hashtags."
+          {/* Toolbar: attach file */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.5 }}>
+            <Tooltip title="Attach image or video (Blossom)">
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading || isSubmitting}
+                >
+                  {isUploading ? <CircularProgress size={18} /> : <AttachFileIcon fontSize="small" />}
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Typography variant="caption" color="text.secondary">
+              Paste or drag &amp; drop images/videos to attach
+            </Typography>
+          </Box>
+
+          {isUploading && <LinearProgress sx={{ mb: 0.5, borderRadius: 1 }} />}
+
+          {/* Drag-and-drop zone */}
+          <Box
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            sx={{
+              position: "relative",
+              outline: isDragOver ? "2px dashed" : "none",
+              outlineColor: "primary.main",
+              borderRadius: 1,
+            }}
+          >
+            <MentionTextArea
+              label="Poll Question"
+              value={eventContent}
+              onChange={setEventContent}
+              required
+              placeholder="Ask a question. Use @mentions and #hashtags."
+              onFilePaste={(file, cursorPos) => uploadQuestionFile(file, cursorPos)}
+            />
+            {isDragOver && (
+              <Box
+                sx={{
+                  position: "absolute",
+                  inset: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  bgcolor: "action.hover",
+                  borderRadius: 1,
+                  pointerEvents: "none",
+                }}
+              >
+                <Typography variant="body2" color="primary">Drop to upload</Typography>
+              </Box>
+            )}
+          </Box>
+
+          {/* Hidden file input for question */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,video/*"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) uploadQuestionFile(file);
+              e.target.value = "";
+            }}
+          />
+
+          {/* Hidden file input for options */}
+          <input
+            ref={optionFileInputRef}
+            type="file"
+            accept="image/*,video/*"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file && pendingOptionIndexRef.current !== null) {
+                uploadOptionFile(file, pendingOptionIndexRef.current);
+              }
+              e.target.value = "";
+            }}
           />
         </Box>
 
@@ -237,6 +391,12 @@ const PollTemplateForm: React.FC<{
             onRemoveOption={removeOption}
             onEditOptions={onEditOptions}
             options={options}
+            onPasteFile={(file, index, cursorPos) => uploadOptionFile(file, index, cursorPos)}
+            onClickAttach={(index) => {
+              pendingOptionIndexRef.current = index;
+              optionFileInputRef.current?.click();
+            }}
+            uploadingIndex={uploadingOptionIndex}
           />
         </Box>
 
