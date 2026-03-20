@@ -381,37 +381,37 @@ const PollResponseForm: React.FC<PollResponseFormProps> = ({
                 />
               }
               title={
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <Box>
-                    <Typography>
-                      {profiles?.get(pollEvent.pubkey)?.name ||
-                        profiles?.get(pollEvent.pubkey)?.username ||
-                        profiles?.get(pollEvent.pubkey)?.nip05 ||
-                        (() => {
-                          const npub = nip19.npubEncode(pollEvent.pubkey);
-                          return npub.slice(0, 6) + "…" + npub.slice(-4);
-                        })()}
-                    </Typography>
-                    <Nip05Badge
-                      nip05={profiles?.get(pollEvent.pubkey)?.nip05}
-                      pubkey={pollEvent.pubkey}
-                    />
-                  </Box>
-                  {user && !user.follows?.includes(pollEvent.pubkey) && (
-                    <Button onClick={addToContacts}>Follow</Button>
-                  )}
-                </div>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography>
+                    {profiles?.get(pollEvent.pubkey)?.name ||
+                      profiles?.get(pollEvent.pubkey)?.username ||
+                      profiles?.get(pollEvent.pubkey)?.nip05 ||
+                      (() => {
+                        const npub = nip19.npubEncode(pollEvent.pubkey);
+                        return npub.slice(0, 6) + "…" + npub.slice(-4);
+                      })()}
+                  </Typography>
+                  <Nip05Badge
+                    nip05={profiles?.get(pollEvent.pubkey)?.nip05}
+                    pubkey={pollEvent.pubkey}
+                  />
+                </Box>
               }
               subheader={calculateTimeAgo(pollEvent.created_at)}
               action={
-                <IconButton
-                  onClick={(e) => {
-                    setIsDetailsOpen(!isDetailsOpen);
-                    setAnchorEl(e.currentTarget);
-                  }}
-                >
-                  <MoreVertIcon />
-                </IconButton>
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  {user && !user.follows?.includes(pollEvent.pubkey) && (
+                    <Button size="small" onClick={addToContacts}>Follow</Button>
+                  )}
+                  <IconButton
+                    onClick={(e) => {
+                      setIsDetailsOpen(!isDetailsOpen);
+                      setAnchorEl(e.currentTarget);
+                    }}
+                  >
+                    <MoreVertIcon />
+                  </IconButton>
+                </Box>
               }
               sx={{ m: 0, pl: 2, pt: 1 }}
             />

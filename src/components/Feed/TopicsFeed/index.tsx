@@ -25,6 +25,7 @@ import { useUserContext } from "../../../hooks/useUserContext";
 import { useSubNav } from "../../../contexts/SubNavContext";
 import { useGossipContext } from "../../../contexts/GossipContext";
 import { useBackClose } from "../../../hooks/useBackClose";
+import { useFeedActions } from "../../../contexts/FeedActionsContext";
 
 const TopicsFeed: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"discover" | "myTopics" | "interests">(() => {
@@ -36,6 +37,9 @@ const TopicsFeed: React.FC = () => {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [metadataMap, setMetadataMap] = useState<Map<string, Event>>(new Map());
+  const [refreshKey, setRefreshKey] = useState(0);
+  // Ref to the "My Interests" feed's refresh function (registered by MyTopicsFeed)
+  const interestsRefreshRef = useRef<(() => void) | undefined>(undefined);
 
   const { relays } = useRelays();
   const { myTopics } = useListContext();
@@ -45,6 +49,7 @@ const TopicsFeed: React.FC = () => {
   const subRef = useRef<ReturnType<typeof nostrRuntime.subscribe> | null>(null);
   const isMounted = useRef(true);
   const { setItems, clearItems } = useSubNav();
+  const { registerRefresh } = useFeedActions();
   const { networkInterests } = useGossipContext();
   const handleCloseSearch = () => setSearchOpen(false);
   useBackClose(searchOpen, handleCloseSearch);
@@ -133,6 +138,7 @@ const TopicsFeed: React.FC = () => {
     if (tag || relays.length === 0) return;
 
     setLoading(true);
+    setTagsMap(new Map()); // clear on refresh
 
     if (subRef.current) {
       subRef.current.unsubscribe();
@@ -187,7 +193,19 @@ const TopicsFeed: React.FC = () => {
         subRef.current = null;
       }
     };
-  }, [tag, relays]);
+  }, [tag, relays, refreshKey]); // refreshKey forces a re-fetch on manual refresh
+
+  const handleRefresh = useCallback(() => {
+    if (activeTab === "interests") {
+      interestsRefreshRef.current?.();
+    } else {
+      setRefreshKey((k) => k + 1);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    registerRefresh(handleRefresh);
+  }, [registerRefresh, handleRefresh]);
 
   const handleSearchSubmit = () => {
     if (searchTerm.trim()) {
@@ -224,7 +242,11 @@ const TopicsFeed: React.FC = () => {
 
       <Box sx={{ flexGrow: 1, minHeight: 0 }}>
         {activeTab === "interests" ? (
-          <MyTopicsFeed onNavigateToDiscover={() => handleTabChange("discover")} onSearchClick={() => setSearchOpen(true)} />
+          <MyTopicsFeed
+            onNavigateToDiscover={() => handleTabChange("discover")}
+            onSearchClick={() => setSearchOpen(true)}
+            onRegisterRefresh={(fn) => { interestsRefreshRef.current = fn; }}
+          />
         ) : loading && activeTab === "discover" ? (
           // Loading state for discover tab
           <Box display="flex" justifyContent="center" py={6}>

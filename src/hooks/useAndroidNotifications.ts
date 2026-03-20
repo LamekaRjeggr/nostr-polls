@@ -12,31 +12,60 @@ import { useUserContext } from './useUserContext';
 import { useRelays } from './useRelays';
 import { initLocalNotifications, fireNotification, NotifExtra } from '../services/localNotificationService';
 
-// TODO: change to 60 * 60 * 1000 (1 hour) for production
-const JS_CHECK_MS = 5 * 60 * 1000; // 5 minutes — JS foreground interval
+const NOTIF_ID_DMS = 1002;
 
-const NOTIF_ID_EVENTS = 1001;
-const NOTIF_ID_DMS    = 1002;
+/** Derive a stable integer notification ID from an event ID (hex string). */
+function eventIdToNotifId(eventId: string): number {
+  return (parseInt(eventId.slice(0, 8), 16) & 0x7fffffff) || 1;
+}
 
-function buildEventBody(notifications: Map<string, Event>, lastSeen: number | null): string {
-  const unread = Array.from(notifications.values())
-    .filter(ev => lastSeen === null || ev.created_at > lastSeen);
-
-  let pollResponses = 0, mentions = 0, reactions = 0, zaps = 0;
-  for (const ev of unread) {
-    if (ev.kind === 1018) pollResponses++;
-    else if (ev.kind === 1) mentions++;
-    else if (ev.kind === 7) reactions++;
-    else if (ev.kind === 9735) zaps++;
+function buildEventNotification(
+  ev: Event,
+  pollMap: Map<string, Event>
+): { title: string; body: string; extra: NotifExtra } {
+  if (ev.kind === 1018) {
+    const pollId = ev.tags.find((t) => t[0] === 'e')?.[1];
+    const pollContent = pollId ? pollMap.get(pollId)?.content : undefined;
+    const nevent = pollId ? (() => { try { return nip19.neventEncode({ id: pollId }); } catch { return undefined; } })() : undefined;
+    return {
+      title: 'New poll response',
+      body: pollContent ? `"${pollContent.slice(0, 80)}"` : 'Someone responded to your poll',
+      extra: nevent ? { target: 'respond', nevent } : { target: 'notifications' },
+    };
   }
 
-  const parts: string[] = [];
-  if (pollResponses > 0) parts.push(`${pollResponses} poll response${pollResponses > 1 ? 's' : ''}`);
-  if (mentions > 0)      parts.push(`${mentions} mention${mentions > 1 ? 's' : ''}`);
-  if (reactions > 0)     parts.push(`${reactions} reaction${reactions > 1 ? 's' : ''}`);
-  if (zaps > 0)          parts.push(`${zaps} zap${zaps > 1 ? 's' : ''}`);
+  if (ev.kind === 1) {
+    const nevent = (() => { try { return nip19.neventEncode({ id: ev.id }); } catch { return undefined; } })();
+    return {
+      title: 'New mention',
+      body: ev.content ? `"${ev.content.slice(0, 80)}"` : '',
+      extra: nevent ? { target: 'note', nevent } : { target: 'notifications' },
+    };
+  }
 
-  return parts.length > 0 ? parts.join(', ') : `${unread.length} new notification${unread.length > 1 ? 's' : ''}`;
+  if (ev.kind === 7) {
+    const postId = ev.tags.find((t) => t[0] === 'e')?.[1];
+    const nevent = postId ? (() => { try { return nip19.neventEncode({ id: postId }); } catch { return undefined; } })() : undefined;
+    return {
+      title: `New reaction ${ev.content || ''}`.trim(),
+      body: '',
+      extra: nevent ? { target: 'note', nevent } : { target: 'notifications' },
+    };
+  }
+
+  if (ev.kind === 9735) {
+    return {
+      title: 'New zap ⚡',
+      body: '',
+      extra: { target: 'notifications' },
+    };
+  }
+
+  return {
+    title: 'New notification',
+    body: '',
+    extra: { target: 'notifications' },
+  };
 }
 
 function buildDMBody(conversations: Map<string, Conversation>, userPubkey: string | undefined): string {
@@ -66,30 +95,34 @@ function getSingleDMNpub(conversations: Map<string, Conversation>, userPubkey: s
 
 function handleDeepLink(url: string, navigate: ReturnType<typeof useNavigate>) {
   console.log('[AndroidNotif] handleDeepLink:', url);
-  // nostr-polls://app/messages/npub1...  →  /messages/:npub
-  // nostr-polls://app/messages            →  /messages
-  // nostr-polls://app/notifications       →  /notifications
   if (url.includes('/messages/')) {
     const npub = url.split('/messages/')[1];
     navigate(`/messages/${npub}`);
   } else if (url.includes('/messages')) {
     navigate('/messages');
+  } else if (url.includes('/respond/')) {
+    const nevent = url.split('/respond/')[1];
+    navigate(`/respond/${nevent}`);
+  } else if (url.includes('/note/')) {
+    const nevent = url.split('/note/')[1];
+    navigate(`/note/${nevent}`);
   } else if (url.includes('/notifications')) {
-    navigate("/notifications");
+    navigate('/notifications');
   }
 }
 
 export function useAndroidNotifications() {
   const navigate = useNavigate();
-  const { unreadCount, notifications, lastSeen } = useNostrNotifications();
+  const { unreadCount, notifications, lastSeen, pollMap } = useNostrNotifications();
   const { unreadTotal: dmUnread, conversations } = useDMContext();
   const { user } = useUserContext();
   const { relays } = useRelays();
   const permitted = useRef(false);
-  const prevEvents = useRef(0);
   const prevDMs    = useRef(0);
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
+  // Track which event IDs we've already fired a notification for (per session)
+  const firedEventIds = useRef(new Set<string>());
 
   // Request permission + register listeners once
   useEffect(() => {
@@ -103,10 +136,15 @@ export function useAndroidNotifications() {
     const tapSub = LocalNotifications.addListener('localNotificationActionPerformed', (action) => {
       const extra = action.notification.extra as NotifExtra | undefined;
       console.log('[AndroidNotif] notification tapped, extra:', extra);
-      if (extra?.target === 'messages') {
-        navigateRef.current(extra.npub ? `/messages/${extra.npub}` : '/messages');
-      } else if (extra?.target === 'notifications') {
-        navigate("/notifications");
+      if (!extra) return;
+      if (extra.target === 'messages') {
+        navigateRef.current('npub' in extra && extra.npub ? `/messages/${extra.npub}` : '/messages');
+      } else if (extra.target === 'notifications') {
+        navigateRef.current('/notifications');
+      } else if (extra.target === 'respond') {
+        navigateRef.current(`/respond/${extra.nevent}`);
+      } else if (extra.target === 'note') {
+        navigateRef.current(`/note/${extra.nevent}`);
       }
     });
 
@@ -140,17 +178,27 @@ export function useAndroidNotifications() {
     Preferences.set({ key: 'worker_relay', value: relays[0] });
   }, [relays]);
 
-  // Fire when new Nostr events arrive while backgrounded
+  // Fire one notification per new unread event while the app is backgrounded
   useEffect(() => {
-    console.log('[AndroidNotif] unreadCount changed:', unreadCount,
-      '| prev:', prevEvents.current, '| permitted:', permitted.current, '| hidden:', document.hidden);
-    if (!permitted.current) { prevEvents.current = unreadCount; return; }
-    if (unreadCount > prevEvents.current && document.hidden) {
-      fireNotification(NOTIF_ID_EVENTS, 'Pollerama', buildEventBody(notifications, lastSeen),
-        { target: 'notifications' });
+    if (!permitted.current) return;
+
+    const unread = Array.from(notifications.values())
+      .filter(ev => lastSeen === null || ev.created_at > lastSeen)
+      .filter(ev => !firedEventIds.current.has(ev.id));
+
+    for (const ev of unread) {
+      // Always mark as seen so we never re-fire even if foregrounded
+      firedEventIds.current.add(ev.id);
+
+      // Only push the OS notification when the app is in the background
+      if (!document.hidden) continue;
+
+      const notifId = eventIdToNotifId(ev.id);
+      const { title, body, extra } = buildEventNotification(ev, pollMap);
+      console.log('[AndroidNotif] firing per-event notification:', notifId, title);
+      fireNotification(notifId, title, body, extra);
     }
-    prevEvents.current = unreadCount;
-  }, [unreadCount, notifications, lastSeen]);
+  }, [unreadCount, notifications, lastSeen, pollMap]);
 
   // Fire when new DMs arrive while backgrounded
   useEffect(() => {
@@ -159,25 +207,9 @@ export function useAndroidNotifications() {
     if (!permitted.current) { prevDMs.current = dmUnread; return; }
     if (dmUnread > prevDMs.current && document.hidden) {
       const npub = getSingleDMNpub(conversations, user?.pubkey);
-      const extra: NotifExtra = { target: 'messages', ...(npub ? { npub } : {}) };
+      const extra: NotifExtra = npub ? { target: 'messages', npub } : { target: 'messages' };
       fireNotification(NOTIF_ID_DMS, 'Pollerama', buildDMBody(conversations, user?.pubkey), extra);
     }
     prevDMs.current = dmUnread;
   }, [dmUnread, conversations, user?.pubkey]);
-
-  // Periodic JS check (foreground/backgrounded-but-alive)
-  useEffect(() => {
-    const id = setInterval(() => {
-      if (!permitted.current || !document.hidden) return;
-      if (unreadCount > 0)
-        fireNotification(NOTIF_ID_EVENTS, 'Pollerama', buildEventBody(notifications, lastSeen),
-          { target: 'notifications' });
-      if (dmUnread > 0) {
-        const npub = getSingleDMNpub(conversations, user?.pubkey);
-        const extra: NotifExtra = { target: 'messages', ...(npub ? { npub } : {}) };
-        fireNotification(NOTIF_ID_DMS, 'Pollerama', buildDMBody(conversations, user?.pubkey), extra);
-      }
-    }, JS_CHECK_MS);
-    return () => clearInterval(id);
-  }, [unreadCount, dmUnread, notifications, lastSeen, conversations, user?.pubkey]);
 }

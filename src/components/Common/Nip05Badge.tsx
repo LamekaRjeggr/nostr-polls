@@ -38,18 +38,18 @@ export const Nip05Badge: React.FC<Nip05BadgeProps> = ({
   if (!identifier) return null;
 
   return (
-    <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+    <Box sx={{ display: "flex", alignItems: "flex-start", gap: 0.5, minWidth: 0 }}>
       {status === "verified" && (
         <Tooltip title="NIP-05 verified">
-          <VerifiedIcon sx={{ fontSize: 14, color: "primary.main" }} />
+          <VerifiedIcon sx={{ fontSize: 14, color: "primary.main", mt: "2px", flexShrink: 0 }} />
         </Tooltip>
       )}
       {status === "failed" && (
         <Tooltip title="NIP-05 could not be verified">
-          <WarningAmberIcon sx={{ fontSize: 14, color: "warning.main" }} />
+          <WarningAmberIcon sx={{ fontSize: 14, color: "warning.main", mt: "2px", flexShrink: 0 }} />
         </Tooltip>
       )}
-      <Typography variant={variant} color="text.secondary" noWrap>
+      <Typography variant={variant} color="text.secondary" sx={{ wordBreak: "break-all" }}>
         {formatNip05(identifier)}
       </Typography>
     </Box>

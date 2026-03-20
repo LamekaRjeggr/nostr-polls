@@ -13,7 +13,11 @@ export async function initLocalNotifications(): Promise<boolean> {
   } catch (e) { console.warn('[LocalNotif] requestPermissions error:', e); return false; }
 }
 
-export type NotifExtra = { target: 'notifications' | 'messages'; npub?: string };
+export type NotifExtra =
+  | { target: 'notifications' }
+  | { target: 'messages'; npub?: string }
+  | { target: 'respond'; nevent: string }
+  | { target: 'note'; nevent: string };
 
 // Debounce bursts into one notification per ID
 const timers: Record<number, ReturnType<typeof setTimeout>> = {};

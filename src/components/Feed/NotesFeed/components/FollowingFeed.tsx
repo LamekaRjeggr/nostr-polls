@@ -10,10 +10,21 @@ import { useReports } from "../../../../hooks/useReports";
 const isRootNote = (event: { tags: string[][] }) =>
   !event.tags.some((t) => t[0] === "e");
 
-const FollowingFeed = ({ noteMode }: { noteMode: NoteMode }) => {
+const FollowingFeed = ({
+  noteMode,
+  onRegisterRefresh,
+}: {
+  noteMode: NoteMode;
+  onRegisterRefresh?: (fn: () => void) => void;
+}) => {
   const { user, requestLogin } = useUserContext();
-  const { notes, reposts, fetchNotes, refreshNotes, loadingMore, refreshing, pendingCount, mergeNewNotes } =
+  const { notes, reposts, fetchNotes, refreshNotes, checkForNewer, loadingMore, refreshing, pendingCount, mergeNewNotes } =
     useFollowingNotes();
+
+  // Register refresh with parent header button
+  useEffect(() => {
+    onRegisterRefresh?.(refreshNotes);
+  }, [onRegisterRefresh, refreshNotes]);
   const { requestReportCheck, requestUserReportCheck } = useReports();
 
   // Merge notes and reposts for sorting by created_at
@@ -79,6 +90,7 @@ const FollowingFeed = ({ noteMode }: { noteMode: NoteMode }) => {
         loading={loadingMore && mergedNotes.length === 0}
         followOutput={false}
         onEndReached={fetchNotes}
+        onRefreshNewer={checkForNewer}
         onRefresh={refreshNotes}
         refreshing={refreshing}
         computeItemKey={(_, item) => item.note.id}

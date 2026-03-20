@@ -411,31 +411,31 @@ export const Notes: React.FC<NotesProps> = ({
               />
             }
             title={
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <Box>
-                  <Typography>
-                    {profiles?.get(event.pubkey)?.name ||
-                      profiles?.get(event.pubkey)?.username ||
-                      profiles?.get(event.pubkey)?.nip05 ||
-                      (() => {
-                        const npub = nip19.npubEncode(event.pubkey);
-                        return npub.slice(0, 6) + "…" + npub.slice(-4);
-                      })()}
-                  </Typography>
-                  <Nip05Badge
-                    nip05={profiles?.get(event.pubkey)?.nip05}
-                    pubkey={event.pubkey}
-                  />
-                </Box>
-                {user && !user.follows?.includes(event.pubkey) ? (
-                  <Button onClick={addToContacts}>Follow</Button>
-                ) : null}
-              </div>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography>
+                  {profiles?.get(event.pubkey)?.name ||
+                    profiles?.get(event.pubkey)?.username ||
+                    profiles?.get(event.pubkey)?.nip05 ||
+                    (() => {
+                      const npub = nip19.npubEncode(event.pubkey);
+                      return npub.slice(0, 6) + "…" + npub.slice(-4);
+                    })()}
+                </Typography>
+                <Nip05Badge
+                  nip05={profiles?.get(event.pubkey)?.nip05}
+                  pubkey={event.pubkey}
+                />
+              </Box>
             }
             action={
-              <IconButton onClick={(e) => setMenuAnchor(e.currentTarget)}>
-                <MoreVertIcon />
-              </IconButton>
+              <Box sx={{ display: "flex", alignItems: "center" }}>
+                {user && !user.follows?.includes(event.pubkey) && (
+                  <Button size="small" onClick={addToContacts}>Follow</Button>
+                )}
+                <IconButton onClick={(e) => setMenuAnchor(e.currentTarget)}>
+                  <MoreVertIcon />
+                </IconButton>
+              </Box>
             }
             subheader={timeAgo}
             sx={{ m: 0, pl: 2, pt: 1 }}

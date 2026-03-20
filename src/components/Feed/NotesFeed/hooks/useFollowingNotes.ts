@@ -48,28 +48,28 @@ export const useFollowingNotes = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.follows, version]);
 
+  // Check for newer notes — non-destructive, adds to pendingCount
+  const checkForNewer = useCallback(() => {
+    if (!initialLoadDoneRef.current || !user?.follows?.length || !relays?.length) return;
+    const authors = Array.from(user.follows!);
+    const currentEvents = nostrRuntime.query({ kinds: [1], authors });
+    if (!currentEvents.length) return;
+    const since = Math.max(...currentEvents.map((e) => e.created_at));
+    const gossipRelays = getRelaysForAuthors(relays, authors);
+    const handle = nostrRuntime.subscribe(
+      gossipRelays,
+      [{ kinds: [1], authors, since: since + 1, limit: 20 }],
+      {
+        onEvent: () => setPendingCount((c) => c + 1),
+        onEose: () => handle.unsubscribe(),
+      }
+    );
+  }, [user?.follows, relays]);
+
   // Poll for newer notes every 60s after initial load; buffer via pendingCount
   useEffect(() => {
     if (!user?.follows?.length || !relays?.length) return;
-
-    const poll = () => {
-      if (!initialLoadDoneRef.current) return;
-      const authors = Array.from(user.follows!);
-      const currentEvents = nostrRuntime.query({ kinds: [1], authors });
-      if (!currentEvents.length) return;
-      const since = Math.max(...currentEvents.map((e) => e.created_at));
-      const gossipRelays = getRelaysForAuthors(relays, authors);
-      const handle = nostrRuntime.subscribe(
-        gossipRelays,
-        [{ kinds: [1], authors, since: since + 1, limit: 20 }],
-        {
-          onEvent: () => setPendingCount((c) => c + 1),
-          onEose: () => handle.unsubscribe(),
-        }
-      );
-    };
-
-    const interval = setInterval(poll, 60_000);
+    const interval = setInterval(checkForNewer, 60_000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.follows, relays]);
@@ -160,6 +160,7 @@ export const useFollowingNotes = () => {
     reposts: reposts(),
     fetchNotes,
     refreshNotes,
+    checkForNewer,
     loadingMore,
     refreshing,
     pendingCount,

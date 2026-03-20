@@ -14,7 +14,7 @@ import {
 } from "@mui/material";
 import ShieldIcon from "@mui/icons-material/Shield";
 import SearchIcon from "@mui/icons-material/Search";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useListContext } from "../../../hooks/useListContext";
 import { useMyTopicsFeed } from "../../../hooks/useMyTopicsFeed";
 import { Notes } from "../../../components/Notes";
@@ -27,9 +27,10 @@ import { useBackClose } from "../../../hooks/useBackClose";
 interface MyTopicsFeedProps {
   onNavigateToDiscover?: () => void;
   onSearchClick?: () => void;
+  onRegisterRefresh?: (fn: () => void) => void;
 }
 
-const MyTopicsFeed = ({ onNavigateToDiscover, onSearchClick }: MyTopicsFeedProps) => {
+const MyTopicsFeed = ({ onNavigateToDiscover, onSearchClick, onRegisterRefresh }: MyTopicsFeedProps) => {
   const { myTopics } = useListContext();
   const {
     notes,
@@ -46,6 +47,10 @@ const MyTopicsFeed = ({ onNavigateToDiscover, onSearchClick }: MyTopicsFeedProps
     mergeNewNotes,
   } = useMyTopicsFeed(myTopics || new Set());
   const { user, requestLogin } = useUserContext();
+
+  useEffect(() => {
+    onRegisterRefresh?.(refreshNotes);
+  }, [onRegisterRefresh, refreshNotes]);
 
   const [dialog, setDialog] = useState<{
     note: any;

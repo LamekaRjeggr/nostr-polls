@@ -1,6 +1,7 @@
-import React, { useState, lazy, Suspense, useEffect } from "react";
+import React, { useState, lazy, Suspense, useEffect, useRef } from "react";
 import { Typography, CircularProgress, Chip, Box } from "@mui/material";
 import RateEventModal from "../../../Ratings/RateEventModal";
+import { useFeedActions } from "../../../../contexts/FeedActionsContext";
 import { useSubNav } from "../../../../contexts/SubNavContext";
 
 const FollowingFeed = lazy(() => import("./FollowingFeed"));
@@ -27,6 +28,16 @@ const NotesFeed = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [noteMode, setNoteMode] = useState<NoteMode>("notes");
   const { setItems, clearItems } = useSubNav();
+  const { registerRefresh } = useFeedActions();
+  // Ref for the active feed's refresh function — set by each feed via onRegisterRefresh
+  const refreshRef = useRef<(() => void) | undefined>(undefined);
+
+  useEffect(() => {
+    // Clear ref when tab changes — new feed will register its own refresh
+    refreshRef.current = undefined;
+    // Register a stable wrapper so the SpeedDial always calls the active sub-feed's refresh
+    registerRefresh(() => refreshRef.current?.());
+  }, [activeTab, registerRefresh]);
 
   useEffect(() => {
     setItems([
@@ -57,7 +68,7 @@ const NotesFeed = () => {
   return (
     <Box sx={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <Box sx={{ flexShrink: 0 }}>
-        <Typography sx={{ mt: 2 }}>
+        <Typography sx={{ color: "text.secondary", fontSize: "0.85rem", mt: 2, mb: showNoteFilter ? 0 : 1 }}>
           {activeTab === "following"
             ? "Notes from people you follow"
             : activeTab === "reacted"
@@ -88,11 +99,17 @@ const NotesFeed = () => {
       <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
         <Suspense fallback={<CircularProgress sx={{ m: 4 }} />}>
           {activeTab === "following" ? (
-            <FollowingFeed noteMode={noteMode} />
+            <FollowingFeed
+              noteMode={noteMode}
+              onRegisterRefresh={(fn) => { refreshRef.current = fn; }}
+            />
           ) : activeTab === "reacted" ? (
             <ReactedFeed />
           ) : (
-            <DiscoverFeed noteMode={noteMode} />
+            <DiscoverFeed
+              noteMode={noteMode}
+              onRegisterRefresh={(fn) => { refreshRef.current = fn; }}
+            />
           )}
         </Suspense>
       </Box>

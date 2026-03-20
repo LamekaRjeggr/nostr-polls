@@ -13,6 +13,7 @@ import ReplayIcon from "@mui/icons-material/Replay";
 import OverlappingAvatars from "../Common/OverlappingAvatars";
 import { useSubNav } from "../../contexts/SubNavContext";
 import { getRelaysForAuthors, prefetchOutboxRelays } from "../../nostr/OutboxService";
+import { useFeedActions } from "../../contexts/FeedActionsContext";
 
 const KIND_POLL = 1068;
 const KIND_RESPONSE = [1018, 1070];
@@ -91,6 +92,7 @@ export const PollFeed = () => {
   const { relays } = useRelays();
   const { requestReportCheck, requestUserReportCheck } = useReports();
   const { setItems, clearItems } = useSubNav();
+  const { registerRefresh } = useFeedActions();
 
   useEffect(() => {
     localStorage.setItem("pollerama:pollSource", eventSource);
@@ -267,6 +269,10 @@ export const PollFeed = () => {
     const closer = fetchInitialPolls(true);
     setFeedSubscription(closer);
   }, [feedSubscription, fetchInitialPolls]);
+
+  useEffect(() => {
+    registerRefresh(refreshFeed);
+  }, [registerRefresh, refreshFeed]);
 
   const pollForNewPolls = () => {
     const since = pollEvents[0]?.created_at || Math.floor(Date.now() / 1000);

@@ -1,41 +1,22 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Fab, Zoom } from "@mui/material";
+import React, { useState } from "react";
+import { SpeedDial, SpeedDialAction, SpeedDialIcon } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useFeedActions } from "../../contexts/FeedActionsContext";
 
 const CreateFAB: React.FC = () => {
-  const [visible, setVisible] = useState(true);
+  const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { isScrolledDown, scrollToTop, refresh } = useFeedActions();
 
-  useEffect(() => {
-    const handleScroll = () => {
-      setVisible(false);
-
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-
-      scrollTimeoutRef.current = setTimeout(() => {
-        setVisible(true);
-      }, 300);
-    };
-
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const handleClick = () => {
+  const handleCreate = () => {
+    setOpen(false);
     if (location.pathname.startsWith("/feeds/polls")) {
       navigate("/create?type=poll");
     } else {
-      // Pre-fill hashtag from topics feed
       const match = location.pathname.match(/\/feeds\/topics\/(.+)/);
       if (match) {
         navigate(`/create?hashtag=${encodeURIComponent(match[1])}`);
@@ -45,21 +26,44 @@ const CreateFAB: React.FC = () => {
     }
   };
 
+  const handleScrollToTop = () => {
+    setOpen(false);
+    scrollToTop();
+  };
+
+  const handleRefresh = () => {
+    setOpen(false);
+    refresh();
+  };
+
+
   return (
-    <Zoom in={visible}>
-      <Fab
-        color="primary"
-        onClick={handleClick}
-        sx={{
-          position: "fixed",
-          bottom: 24,
-          right: 24,
-          zIndex: 1000,
-        }}
-      >
-        <AddIcon />
-      </Fab>
-    </Zoom>
+    <SpeedDial
+      ariaLabel="Feed actions"
+      sx={{ position: "fixed", bottom: 24, right: 24, zIndex: 1000 }}
+      icon={<SpeedDialIcon icon={<AddIcon />} />}
+      open={open}
+      onOpen={() => setOpen(true)}
+      onClose={() => setOpen(false)}
+    >
+      {isScrolledDown && (
+        <SpeedDialAction
+          icon={<KeyboardArrowUpIcon />}
+          tooltipTitle="Back to top"
+          onClick={handleScrollToTop}
+        />
+      )}
+      <SpeedDialAction
+        icon={<RefreshIcon />}
+        tooltipTitle="Refresh"
+        onClick={handleRefresh}
+      />
+      <SpeedDialAction
+        icon={<AddIcon />}
+        tooltipTitle="Create"
+        onClick={handleCreate}
+      />
+    </SpeedDial>
   );
 };
 

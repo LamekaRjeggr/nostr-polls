@@ -32,29 +32,30 @@ export const useDiscoverNotes = () => {
         setPendingCount(0);
     }, []);
 
-    // Poll for newer notes every 60s after initial load; buffer count rather than displaying immediately
+    // Check for newer notes — non-destructive, adds to pendingCount
+    const checkForNewer = useCallback(() => {
+        if (!initialLoadComplete || !relays?.length) return;
+        const authors = Array.from(webOfTrustRef.current);
+        if (!authors.length) return;
+        const currentEvents = nostrRuntime.query({ kinds: [1] });
+        if (!currentEvents.length) return;
+        const since = Math.max(...currentEvents.map((e: any) => e.created_at));
+        const handle = nostrRuntime.subscribe(
+            relays,
+            [{ kinds: [1], authors, since: since + 1, limit: 20 }],
+            {
+                onEvent: () => setPendingCount((c) => c + 1),
+                onEose: () => handle.unsubscribe(),
+            }
+        );
+    }, [initialLoadComplete, relays]);
+
+    // Poll for newer notes every 60s after initial load
     useEffect(() => {
         if (!initialLoadComplete || !relays?.length) return;
-
-        const poll = () => {
-            const authors = Array.from(webOfTrustRef.current);
-            if (!authors.length) return;
-            const currentEvents = nostrRuntime.query({ kinds: [1] });
-            if (!currentEvents.length) return;
-            const since = Math.max(...currentEvents.map((e: any) => e.created_at));
-            const handle = nostrRuntime.subscribe(
-                relays,
-                [{ kinds: [1], authors, since: since + 1, limit: 20 }],
-                {
-                    onEvent: () => setPendingCount((c) => c + 1),
-                    onEose: () => handle.unsubscribe(),
-                }
-            );
-        };
-
-        const interval = setInterval(poll, 60_000);
+        const interval = setInterval(checkForNewer, 60_000);
         return () => clearInterval(interval);
-    }, [initialLoadComplete, relays]);
+    }, [initialLoadComplete, relays, checkForNewer]);
 
     const fetchNotes = useCallback((webOfTrust: Set<string>, fresh?: boolean) => {
         if (!webOfTrust?.size || !relays?.length || fetchedRef.current) return;
@@ -120,6 +121,7 @@ export const useDiscoverNotes = () => {
         refreshing,
         fetchNotes,
         refreshNotes,
+        checkForNewer,
         mergeNewNotes,
     };
 };

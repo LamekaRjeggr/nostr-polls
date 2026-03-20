@@ -18,8 +18,10 @@ export function useBackClose(open: boolean, onClose: () => void): void {
     window.history.pushState({ sentinel }, "");
 
     const onPopState = (e: PopStateEvent) => {
-      // Our entry was popped → close the modal.
-      if (e.state?.sentinel === sentinel || !e.state?.sentinel) {
+      // Close only when we LEAVE the sentinel (navigating away from it).
+      // If e.state is our sentinel, we arrived back AT it from something pushed on
+      // top (e.g. a lightbox), so we must NOT close.
+      if (e.state?.sentinel !== sentinel) {
         onClose();
       }
     };

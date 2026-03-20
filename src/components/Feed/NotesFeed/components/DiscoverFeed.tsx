@@ -12,10 +12,22 @@ import { useReports } from "../../../../hooks/useReports";
 const isRootNote = (event: { tags: string[][] }) =>
   !event.tags.some((t) => t[0] === "e");
 
-const DiscoverFeed = ({ noteMode }: { noteMode: NoteMode }) => {
+const DiscoverFeed = ({
+  noteMode,
+  onRegisterRefresh,
+}: {
+  noteMode: NoteMode;
+  onRegisterRefresh?: (fn: () => void) => void;
+}) => {
   const { user, requestLogin } = useUserContext();
-  const { notes, pendingCount, fetchNotes, refreshNotes, loadingMore, refreshing, mergeNewNotes } =
+  const { notes, pendingCount, fetchNotes, refreshNotes, checkForNewer, loadingMore, refreshing, mergeNewNotes } =
     useDiscoverNotes();
+
+  // Register refresh with parent header button
+  useEffect(() => {
+    if (!user?.webOfTrust) return;
+    onRegisterRefresh?.(() => refreshNotes(user.webOfTrust!));
+  }, [onRegisterRefresh, refreshNotes, user?.webOfTrust]);
   const { requestReportCheck, requestUserReportCheck } = useReports();
 
   useEffect(() => {
@@ -95,6 +107,7 @@ const DiscoverFeed = ({ noteMode }: { noteMode: NoteMode }) => {
       loading={loadingMore && mergedNotes.length === 0}
       followOutput={false}
       onRefresh={() => user?.webOfTrust && refreshNotes(user.webOfTrust)}
+      onRefreshNewer={checkForNewer}
       refreshing={refreshing}
       newItemCount={pendingCount}
       newItemLabel="notes"

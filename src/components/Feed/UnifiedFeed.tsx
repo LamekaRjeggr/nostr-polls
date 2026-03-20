@@ -1,9 +1,10 @@
-import React, { useRef } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { Box, CircularProgress, Fab, LinearProgress } from "@mui/material";
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
 import { useNotification } from "../../contexts/notification-context";
 import useTopicExplorerScroll from "../../hooks/useTopicExplorerScroll";
 import PullToRefresh from "../Common/PullToRefresh";
+import { useFeedActions } from "../../contexts/FeedActionsContext";
 
 interface UnifiedFeedProps<T> {
   // Data
@@ -34,6 +35,8 @@ interface UnifiedFeedProps<T> {
 
   // Pull-to-refresh (immersive mode only)
   onRefresh?: () => Promise<void> | void;
+  /** Called when user reaches the bottom — use to poll for newer posts */
+  onRefreshNewer?: () => void;
   /** Show a subtle refreshing indicator (e.g. thin progress bar at top) */
   refreshing?: boolean;
 
@@ -60,6 +63,7 @@ function UnifiedFeed<T>({
   onShowNewItems,
   newItemLabel = "posts",
   onRefresh,
+  onRefreshNewer,
   refreshing,
   headerContent,
   followOutput,
@@ -70,12 +74,34 @@ function UnifiedFeed<T>({
   const { showNotification } = useNotification();
   // Ref to the Virtuoso scroller element — used by PullToRefresh to check scrollTop
   const virtuosoScrollerRef = useRef<HTMLElement | null>(null);
+  // Scroll state reported up to the SpeedDial via context
+  const scrolledDownRef = useRef(false);
+  const { reportScrollState } = useFeedActions();
 
   const virtuosoRef = (externalVirtuosoRef ?? internalVirtuosoRef) as React.RefObject<VirtuosoHandle>;
 
   const isEmbedded = !!customScrollParent;
   const isNested = !!scrollContainerRef;
   const isImmersive = !isEmbedded && !isNested;
+
+  const scrollToTopFn = useCallback(() => {
+    virtuosoRef.current?.scrollToIndex({ index: 0, behavior: "smooth" });
+  }, [virtuosoRef]);
+
+  const handleScroll = useCallback((e: React.UIEvent) => {
+    const scrollTop = (e.target as HTMLElement).scrollTop;
+    const isDown = scrollTop > 300;
+    if (isDown !== scrolledDownRef.current) {
+      scrolledDownRef.current = isDown;
+      if (isImmersive) reportScrollState(isDown, scrollToTopFn);
+    }
+  }, [isImmersive, reportScrollState, scrollToTopFn]);
+
+  // When user reaches the bottom: paginate older posts AND poll for newer ones
+  const handleEndReached = useCallback(() => {
+    onEndReached?.();
+    onRefreshNewer?.();
+  }, [onEndReached, onRefreshNewer]);
 
   // Only active in nested (topic explorer) mode
   useTopicExplorerScroll(
@@ -135,7 +161,7 @@ function UnifiedFeed<T>({
   const feedContent = (
     <>
       <div ref={containerRef} style={{ height: "100%" }}>
-        {refreshing && (
+        {(refreshing || showLoading) && (
           <LinearProgress
             sx={{
               position: "absolute",
@@ -149,16 +175,8 @@ function UnifiedFeed<T>({
         )}
         {headerContent}
         {showLoading ? (
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              minHeight: "200px",
-            }}
-          >
-            <CircularProgress />
-          </Box>
+          // Show a spacer while loading — the LinearProgress bar above signals activity
+          <Box sx={{ minHeight: "200px" }} />
         ) : showEmpty ? (
           <>{emptyState}</>
         ) : (
@@ -168,13 +186,13 @@ function UnifiedFeed<T>({
             itemContent={itemContent}
             {...computeKeyProp}
             style={{ height: "100%" }}
-            endReached={onEndReached}
+            endReached={handleEndReached}
             startReached={onStartReached}
             followOutput={followOutput}
             increaseViewportBy={{ top: 400, bottom: 600 }}
             defaultItemHeight={380}
             scrollerRef={(el) => { virtuosoScrollerRef.current = el as HTMLElement | null; }}
-            onScroll={undefined}
+            onScroll={isImmersive ? handleScroll : undefined}
             components={{
               Footer: () =>
                 loadingMore ? (
@@ -214,6 +232,8 @@ function UnifiedFeed<T>({
           +{newItemCount} {newItemLabel}
         </Fab>
       )}
+
+      {/* Scroll-to-top is now handled by the SpeedDial in CreateFAB via FeedActionsContext */}
     </>
   );
 

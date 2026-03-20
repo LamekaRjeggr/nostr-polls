@@ -4,6 +4,7 @@ import {
   Button,
   Chip,
   CircularProgress,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
@@ -22,7 +23,9 @@ import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import TimerOffIcon from "@mui/icons-material/TimerOff";
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
 import ReplayIcon from "@mui/icons-material/Replay";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { useBackClose } from "../../hooks/useBackClose";
+import useMediaQuery from "@mui/material/useMediaQuery";
 
 export type DiagnosticRelayStatus = "accepted" | "sent" | "rejected" | "failed" | "timeout" | "pending";
 
@@ -102,9 +105,12 @@ export const PublishDiagnosticModal: React.FC<PublishDiagnosticModalProps> = ({
   onRetry,
 }) => {
   useBackClose(open, onClose);
+  const isMobile = useMediaQuery("(max-width:600px)");
   const [currentEntries, setCurrentEntries] = useState<DiagnosticEntry[]>(entries);
   // Set of relay URLs currently being retried
   const [retryingRelays, setRetryingRelays] = useState<Set<string>>(new Set());
+  // On mobile, track which rows have their message expanded
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setCurrentEntries(entries);
@@ -132,6 +138,14 @@ export const PublishDiagnosticModal: React.FC<PublishDiagnosticModalProps> = ({
     }
   };
 
+  const toggleExpanded = (relay: string) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      next.has(relay) ? next.delete(relay) : next.add(relay);
+      return next;
+    });
+  };
+
   const accepted = currentEntries.filter((e) => e.status === "accepted" || e.status === "sent").length;
   const failed = currentEntries.filter((e) => e.status === "rejected" || e.status === "failed").length;
   const timedOut = currentEntries.filter((e) => e.status === "timeout").length;
@@ -149,21 +163,92 @@ export const PublishDiagnosticModal: React.FC<PublishDiagnosticModalProps> = ({
           </Box>
         </Box>
       </DialogTitle>
-      <DialogContent>
+      <DialogContent sx={{ px: isMobile ? 1 : 2 }}>
         <Table size="small">
           <TableHead>
             <TableRow>
               <TableCell sx={{ fontWeight: 600, fontSize: "0.75rem" }}>Relay</TableCell>
-              <TableCell sx={{ fontWeight: 600, fontSize: "0.75rem", width: 110 }}>Status</TableCell>
-              <TableCell sx={{ fontWeight: 600, fontSize: "0.75rem", width: 70 }}>Time</TableCell>
-              <TableCell sx={{ fontWeight: 600, fontSize: "0.75rem" }}>Reason</TableCell>
-              {onRetry && <TableCell sx={{ width: 36 }} />}
+              {isMobile ? (
+                // Mobile: single merged Status column (includes retry button inline)
+                <TableCell sx={{ fontWeight: 600, fontSize: "0.75rem", width: 120 }}>Status</TableCell>
+              ) : (
+                <>
+                  <TableCell sx={{ fontWeight: 600, fontSize: "0.75rem", width: 110 }}>Status</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: "0.75rem", width: 70 }}>Time</TableCell>
+                  <TableCell sx={{ fontWeight: 600, fontSize: "0.75rem" }}>Reason</TableCell>
+                  {onRetry && <TableCell sx={{ width: 36 }} />}
+                </>
+              )}
             </TableRow>
           </TableHead>
           <TableBody>
             {currentEntries.map((e) => {
               const isFailed = e.status !== "accepted" && e.status !== "sent";
               const isRowRetrying = retryingRelays.has(e.relay);
+              const isExpanded = expandedRows.has(e.relay);
+
+              if (isMobile) {
+                return (
+                  <React.Fragment key={e.relay}>
+                    <TableRow>
+                      <TableCell sx={{ fontFamily: "monospace", fontSize: "0.7rem", py: 0.75 }}>
+                        {hostname(e.relay)}
+                      </TableCell>
+                      <TableCell sx={{ py: 0.75 }}>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                          {isRowRetrying ? (
+                            <CircularProgress size={16} />
+                          ) : (
+                            <StatusChip status={e.status} />
+                          )}
+                          {/* Retry button merged into status column */}
+                          {onRetry && isFailed && !isRowRetrying && (
+                            <Tooltip title="Retry">
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  disabled={isRetrying}
+                                  onClick={() => handleRetry(e.relay)}
+                                  sx={{ p: 0.25 }}
+                                >
+                                  <ReplayIcon sx={{ fontSize: 14 }} />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          )}
+                          {/* Expand message */}
+                          {e.message && (
+                            <IconButton
+                              size="small"
+                              onClick={() => toggleExpanded(e.relay)}
+                              sx={{
+                                p: 0.25,
+                                transform: isExpanded ? "rotate(180deg)" : "none",
+                                transition: "transform 0.2s",
+                              }}
+                            >
+                              <ExpandMoreIcon sx={{ fontSize: 14 }} />
+                            </IconButton>
+                          )}
+                        </Box>
+                        {e.message && (
+                          <Collapse in={isExpanded}>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{ display: "block", mt: 0.5, fontSize: "0.65rem", wordBreak: "break-word" }}
+                            >
+                              {e.message}
+                            </Typography>
+                          </Collapse>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  </React.Fragment>
+                );
+              }
+
+              // Desktop: full table
               return (
                 <TableRow key={e.relay}>
                   <TableCell sx={{ fontFamily: "monospace", fontSize: "0.75rem" }}>

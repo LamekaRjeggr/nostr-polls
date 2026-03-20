@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { PrepareNote } from "../../Notes/PrepareNote";
 import { nip19 } from "nostr-tools";
@@ -6,6 +6,7 @@ import { isImageUrl } from "../../../utils/common";
 import { useAppContext } from "../../../hooks/useAppContext";
 import { DEFAULT_IMAGE_URL } from "../../../utils/constants";
 import { Box, Button, IconButton, Tooltip, Typography } from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
 import { useTheme } from "@mui/material/styles";
 import BoltIcon from "@mui/icons-material/Bolt";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
@@ -39,6 +40,24 @@ const isVideoUrl = (url: string) =>
 // so that useState is always called at a stable component boundary.
 const ImageWithLightbox: React.FC<{ src: string; index: number }> = ({ src, index }) => {
   const [open, setOpen] = React.useState(false);
+
+  // Back gesture: push a history entry when open so the back button closes the lightbox.
+  React.useEffect(() => {
+    if (!open) return;
+    window.history.pushState({ lightboxOpen: true }, "");
+    const onPop = () => setOpen(false);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [open]);
+
+  const handleClose = useCallback(() => {
+    setOpen(false);
+    // Pop the history entry we pushed (only if it's still ours).
+    if (window.history.state?.lightboxOpen) {
+      window.history.back();
+    }
+  }, []);
+
   return (
     <>
       <div
@@ -76,7 +95,7 @@ const ImageWithLightbox: React.FC<{ src: string; index: number }> = ({ src, inde
       </div>
       {open && createPortal(
         <div
-          onClick={() => setOpen(false)}
+          onClick={handleClose}
           style={{
             position: "fixed",
             inset: 0,
@@ -88,14 +107,31 @@ const ImageWithLightbox: React.FC<{ src: string; index: number }> = ({ src, inde
             cursor: "zoom-out",
           }}
         >
+          {/* Dedicated close button */}
+          <IconButton
+            onClick={(e) => { e.stopPropagation(); handleClose(); }}
+            size="small"
+            sx={{
+              position: "absolute",
+              top: 12,
+              right: 12,
+              color: "white",
+              bgcolor: "rgba(0,0,0,0.45)",
+              "&:hover": { bgcolor: "rgba(0,0,0,0.65)" },
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
           <img
             src={src}
             alt={`img-${index}-full`}
+            onClick={(e) => e.stopPropagation()}
             style={{
               maxWidth: "92vw",
               maxHeight: "88vh",
               objectFit: "contain",
               borderRadius: "8px",
+              cursor: "default",
             }}
           />
         </div>,
