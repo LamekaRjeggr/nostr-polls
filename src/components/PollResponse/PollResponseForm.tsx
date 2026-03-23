@@ -60,6 +60,8 @@ import { usePublishDiagnostic } from "../../hooks/usePublishDiagnostic";
 import PollOptions from "./PollOptions";
 import { usePollResults } from "../../hooks/usePollResults";
 import { useBackClose } from "../../hooks/useBackClose";
+import NuanceStep, { NuanceResult } from "./NuanceStep";
+import { useNuanceOptions } from "../../hooks/useNuanceOptions";
 
 interface PollResponseFormProps {
   pollEvent: Event;
@@ -101,6 +103,13 @@ const PollResponseForm: React.FC<PollResponseFormProps> = ({
   const [reportAuthorDialogOpen, setReportAuthorDialogOpen] = useState(false);
   const [showReportedAnyway, setShowReportedAnyway] = useState(false);
 
+  // Nuance step: intercept vote submission to collect optional nuance input.
+  // Only active on polls explicitly opted in with the nuanced tag.
+  const [nuanceStepOpen, setNuanceStepOpen] = useState(false);
+  // Captured at option-selection time per spec, not at submit time.
+  const [selectionTimestamp, setSelectionTimestamp] = useState<number | null>(null);
+  const [pendingResponseUser, setPendingResponseUser] = useState<import("../../contexts/user-context").User | null>(null);
+
   const navigate = useNavigate();
   const { showNotification } = useNotification();
   const { profiles, fetchUserProfileThrottled } = useAppContext();
@@ -132,6 +141,18 @@ const PollResponseForm: React.FC<PollResponseFormProps> = ({
     difficulty,
     filterPubkeys,
     showResults
+  );
+
+  // Nuance options — only fetched when the nuance step dialog is open.
+  // Nuanced voting only applies to polls explicitly opted in by the author.
+  const pollIsNuanced = pollEvent.tags.some(
+    (t) => t[0] === "nuanced" && t[1] === "true"
+  );
+  const nuanceOptionId = nuanceStepOpen && responses.length === 1 ? responses[0] : null;
+  const { options: nuanceOptions, loading: nuanceLoading } = useNuanceOptions(
+    pollEvent,
+    nuanceOptionId,
+    nuanceStepOpen && pollIsNuanced
   );
 
   // Check whether the content area overflows its maxHeight cap
@@ -212,13 +233,69 @@ const PollResponseForm: React.FC<PollResponseFormProps> = ({
     if (error) setError("");
     if (pollType === "singlechoice") {
       setResponses([optionValue]);
+      setSelectionTimestamp(Math.floor(Date.now() / 1000));
     } else {
-      setResponses((prev) =>
-        prev.includes(optionValue)
+      setResponses((prev) => {
+        const next = prev.includes(optionValue)
           ? prev.filter((v) => v !== optionValue)
-          : [...prev, optionValue]
-      );
+          : [...prev, optionValue];
+        if (next.length > 0) setSelectionTimestamp(Math.floor(Date.now() / 1000));
+        return next;
+      });
     }
+  };
+
+  /** Emits the signed kind:1018 vote event, optionally with a nuance tag. */
+  const emitVoteEvent = async (
+    responseUser: NonNullable<typeof user>,
+    createdAt: number,
+    nuance?: NuanceResult
+  ) => {
+    const nuanceTags: string[][] = [];
+    if (nuance?.type === "cosign") {
+      nuanceTags.push(["nuance", nuance.eventId]);
+    } else if (nuance?.type === "freeform") {
+      nuanceTags.push(["nuance", nuance.text]);
+    }
+    // nuance.type === "skip" → no nuance tag
+
+    const responseEvent = {
+      kind: 1018,
+      content: "",
+      tags: [
+        ["e", pollEvent.id],
+        ...responses.map((r) => ["response", r]),
+        ...nuanceTags,
+      ],
+      created_at: createdAt,
+      pubkey: responseUser.pubkey,
+    };
+
+    let useEvent = responseEvent;
+    if (difficulty) {
+      setShowPoWModal(true);
+      const minedEvent = await minePow(responseEvent).catch(() => undefined);
+      if (!minedEvent) { setShowPoWModal(false); return; }
+      useEvent = minedEvent;
+    }
+
+    setShowPoWModal(false);
+    const signedResponse = await signEvent(useEvent, responseUser.privateKey);
+    const voteRelays = pollEvent.tags.filter((t) => t[0] === "relay").map((t) => t[1]);
+    const publishRelays = voteRelays.length ? voteRelays : relays;
+    const result = await waitForPublish(publishRelays, signedResponse!);
+    openDiagnostic(signedResponse!, result, "Vote publish results");
+    if (result.ok) {
+      showNotification(`Vote submitted to ${result.accepted}/${result.total} relays`, "success");
+      if (result.accepted < result.total) {
+        setDiagnosticOpen(true);
+      }
+    } else {
+      showNotification("No relays accepted your vote", "error");
+      setDiagnosticOpen(true);
+    }
+    setHasSubmitted(true);
+    setShowResults(true);
   };
 
   const handleSubmitResponse = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -237,39 +314,31 @@ const PollResponseForm: React.FC<PollResponseFormProps> = ({
       setUser(responseUser);
     }
 
-    const responseEvent = {
-      kind: 1018,
-      content: "",
-      tags: [["e", pollEvent.id], ...responses.map((r) => ["response", r])],
-      created_at: Math.floor(Date.now() / 1000),
-      pubkey: responseUser!.pubkey,
-    };
+    // Use the timestamp from when the user selected their option, per spec.
+    const createdAt = selectionTimestamp ?? Math.floor(Date.now() / 1000);
 
-    let useEvent = responseEvent;
-    if (difficulty) {
-      setShowPoWModal(true);
-      const minedEvent = await minePow(responseEvent).catch(() => undefined);
-      if (!minedEvent) { setShowPoWModal(false); return; }
-      useEvent = minedEvent;
+    // If the poll has nuanced voting enabled, intercept to show the nuance step.
+    if (pollIsNuanced) {
+      setPendingResponseUser(responseUser);
+      setNuanceStepOpen(true);
+      return;
     }
 
-    setShowPoWModal(false);
-    const signedResponse = await signEvent(useEvent, responseUser!.privateKey);
-    const eventRelays = pollEvent.tags.filter((t) => t[0] === "relay").map((t) => t[1]);
-    const publishRelays = eventRelays.length ? eventRelays : relays;
-    const result = await waitForPublish(publishRelays, signedResponse!);
-    openDiagnostic(signedResponse!, result, "Vote publish results");
-    if (result.ok) {
-      showNotification(`Vote submitted to ${result.accepted}/${result.total} relays`, "success");
-      if (result.accepted < result.total) {
-        setDiagnosticOpen(true);
-      }
-    } else {
-      showNotification("No relays accepted your vote", "error");
-      setDiagnosticOpen(true);
-    }
-    setHasSubmitted(true);
-    setShowResults(true);
+    // Not nuanced — emit immediately.
+    await emitVoteEvent(responseUser!, createdAt);
+  };
+
+  const handleNuanceSubmit = async (nuance: NuanceResult) => {
+    setNuanceStepOpen(false);
+    if (!pendingResponseUser) return;
+    const createdAt = selectionTimestamp ?? Math.floor(Date.now() / 1000);
+    await emitVoteEvent(pendingResponseUser, createdAt, nuance);
+    setPendingResponseUser(null);
+  };
+
+  const handleNuanceCancel = () => {
+    setNuanceStepOpen(false);
+    setPendingResponseUser(null);
   };
 
   const handleCopyNevent = async () => {
@@ -592,6 +661,15 @@ const PollResponseForm: React.FC<PollResponseFormProps> = ({
           relays={eventRelays}
         />
       </Card>
+
+      <NuanceStep
+        open={nuanceStepOpen}
+        loading={nuanceLoading}
+        nuanceOptions={nuanceOptions}
+        pollExpiration={pollExpiration}
+        onSubmit={handleNuanceSubmit}
+        onCancel={handleNuanceCancel}
+      />
 
       <ProofofWorkModal
         show={showPoWModal}
