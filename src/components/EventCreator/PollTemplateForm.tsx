@@ -15,8 +15,6 @@ import {
   IconButton,
   Tooltip,
   LinearProgress,
-  FormControlLabel,
-  Switch,
 } from "@mui/material";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import MentionTextArea, { extractMentionTags } from "./MentionTextArea";
@@ -29,7 +27,6 @@ import dayjs from "dayjs";
 import RadioButtonCheckedIcon from "@mui/icons-material/RadioButtonChecked";
 import CheckBoxIcon from "@mui/icons-material/CheckBox";
 import FormatListNumberedIcon from "@mui/icons-material/FormatListNumbered";
-import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import OptionsCard from "./OptionsCard";
 import { Option } from "../../interfaces";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -112,9 +109,6 @@ const PollTemplateForm: React.FC<{
   useEffect(() => { optionsRef.current = options; }, [options]);
   const { result: publishResult, open: diagnosticOpen, setOpen: setDiagnosticOpen, title: diagnosticTitle, openModal, retry } = usePublishDiagnostic();
   const [topics, setTopics] = useState<string[]>([]);
-  const [nuanced, setNuanced] = useState(false);
-  const [parentPollId, setParentPollId] = useState<string>("");
-  const [cascadeOptionId, setCascadeOptionId] = useState<string>("");
 
   const { showNotification } = useNotification();
   const { user } = useUserContext();
@@ -218,11 +212,6 @@ const PollTemplateForm: React.FC<{
       }
 
       const mentionTags = extractMentionTags(eventContent);
-      const parentTags: string[][] = [];
-      if (parentPollId.trim() && cascadeOptionId.trim()) {
-        parentTags.push(["e", parentPollId.trim(), "", "parent"]);
-        parentTags.push(["cascade-option", cascadeOptionId.trim()]);
-      }
       const pollEvent = {
         kind: NOSTR_EVENT_KINDS.POLL,
         content: finalContent,
@@ -232,8 +221,6 @@ const PollTemplateForm: React.FC<{
           ...topics.map((tag) => ["t", tag]),
           ...mentionTags,
           ...quoteTags,
-          ...parentTags,
-          ...(nuanced ? [["nuanced", "true"]] : []),
         ],
         created_at: Math.floor(Date.now() / 1000),
       };
@@ -470,25 +457,6 @@ const PollTemplateForm: React.FC<{
                 />
               </LocalizationProvider>
             </Grid>
-            <Grid size={{ xs: 12 }}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={nuanced}
-                    onChange={(e) => setNuanced(e.target.checked)}
-                  />
-                }
-                label={
-                  <Box>
-                    <Typography variant="body1">Nuanced voting</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Voters add context to their choice — their input shapes
-                      the options of any follow-up polls.
-                    </Typography>
-                  </Box>
-                }
-              />
-            </Grid>
           </Grid>
         </Box>
 
@@ -506,38 +474,6 @@ const PollTemplateForm: React.FC<{
           />
         </Box>
 
-        <Box>
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-            <AccountTreeIcon fontSize="small" color="action" />
-            <Typography variant="h6">Child Poll (Optional)</Typography>
-          </Stack>
-          <Collapse in={nuanced}>
-            <Stack spacing={2}>
-              <TextField
-                label="Parent Poll Event ID (if child poll)"
-                placeholder="64-char hex event ID of the parent poll"
-                value={parentPollId}
-                onChange={(e) => setParentPollId(e.target.value)}
-                fullWidth
-                inputProps={{ maxLength: 64 }}
-                helperText={
-                  parentPollId && !/^[0-9a-f]{64}$/.test(parentPollId)
-                    ? "Must be a 64-character hex string"
-                    : ""
-                }
-                error={!!parentPollId && !/^[0-9a-f]{64}$/.test(parentPollId)}
-              />
-              <TextField
-                label="Cascade Option ID (if child poll)"
-                placeholder="Option ID from parent poll that triggered this branch"
-                value={cascadeOptionId}
-                onChange={(e) => setCascadeOptionId(e.target.value)}
-                fullWidth
-                helperText="The option ID (not label) from the parent poll"
-              />
-            </Stack>
-          </Collapse>
-        </Box>
 
         <Box sx={{ pt: 2 }}>
           <Box display="flex" flexDirection="column" gap={2}>

@@ -144,15 +144,11 @@ const PollResponseForm: React.FC<PollResponseFormProps> = ({
   );
 
   // Nuance options — only fetched when the nuance step dialog is open.
-  // Nuanced voting only applies to polls explicitly opted in by the author.
-  const pollIsNuanced = pollEvent.tags.some(
-    (t) => t[0] === "nuanced" && t[1] === "true"
-  );
   const nuanceOptionId = nuanceStepOpen && responses.length === 1 ? responses[0] : null;
   const { options: nuanceOptions, loading: nuanceLoading } = useNuanceOptions(
     pollEvent,
     nuanceOptionId,
-    nuanceStepOpen && pollIsNuanced
+    nuanceStepOpen
   );
 
   // Check whether the content area overflows its maxHeight cap
@@ -314,18 +310,9 @@ const PollResponseForm: React.FC<PollResponseFormProps> = ({
       setUser(responseUser);
     }
 
-    // Use the timestamp from when the user selected their option, per spec.
-    const createdAt = selectionTimestamp ?? Math.floor(Date.now() / 1000);
-
-    // If the poll has nuanced voting enabled, intercept to show the nuance step.
-    if (pollIsNuanced) {
-      setPendingResponseUser(responseUser);
-      setNuanceStepOpen(true);
-      return;
-    }
-
-    // Not nuanced — emit immediately.
-    await emitVoteEvent(responseUser!, createdAt);
+    // Intercept to show the nuance step before emitting the vote.
+    setPendingResponseUser(responseUser);
+    setNuanceStepOpen(true);
   };
 
   const handleNuanceSubmit = async (nuance: NuanceResult) => {
